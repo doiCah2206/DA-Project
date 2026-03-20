@@ -1,0 +1,206 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --notary-dark: #0A0E1A;
+  --notary-dark-secondary: #111827;
+  --notary-cyan: #00D4FF;
+  --notary-cyan-dim: #00A3CC;
+  --notary-gold: #F5C842;
+  --notary-gold-dim: #D4A832;
+  --notary-slate: #64748B;
+  --notary-slate-dark: #334155;
+  --notary-success: #10B981;
+  --notary-error: #EF4444;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background-color: var(--notary-dark);
+  color: #E2E8F0;
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Syne', sans-serif;
+}
+
+.font-mono {
+  font-family: 'Space Mono', monospace;
+}
+
+.font-heading {
+  font-family: 'Syne', sans-serif;
+}
+
+.font-body {
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--notary-dark-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--notary-slate-dark);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--notary-slate);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--notary-cyan) 0%, #8B5CF6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+}
+
+.glow-gold {
+  box-shadow: 0 0 20px rgba(245, 200, 66, 0.3);
+}
+
+.glow-cyan-hover:hover {
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
+}
+
+/* Card styles */
+.notary-card {
+  background: linear-gradient(145deg, rgba(17, 24, 39, 0.8) 0%, rgba(10, 14, 26, 0.9) 100%);
+  border: 1px solid rgba(0, 212, 255, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.notary-card-hover:hover {
+  border-color: rgba(0, 212, 255, 0.3);
+  box-shadow: 0 0 30px rgba(0, 212, 255, 0.1);
+}
+
+/* Scanline effect */
+.scanline-overlay {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanline-overlay::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--notary-cyan), transparent);
+  animation: scanline 8s linear infinite;
+  opacity: 0.3;
+}
+
+/* Shimmer effect */
+.shimmer {
+  background: linear-gradient(90deg,
+      rgba(0, 212, 255, 0) 0%,
+      rgba(0, 212, 255, 0.1) 50%,
+      rgba(0, 212, 255, 0) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* Verified stamp */
+.verified-stamp {
+  position: relative;
+}
+
+.verified-stamp::before {
+  content: '✓';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  background: var(--notary-success);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  color: white;
+}
+
+/* Input styles */
+input,
+textarea,
+select {
+  font-family: 'DM Sans', sans-serif;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
+
+/* Button base */
+.btn-primary {
+  @apply bg-notary-cyan text-notary-dark font-semibold px-6 py-3 rounded-lg transition-all duration-300;
+}
+
+.btn-primary:hover {
+  @apply bg-notary-cyan-dim glow-cyan-hover;
+}
+
+.btn-secondary {
+  @apply border border-notary-cyan text-notary-cyan font-semibold px-6 py-3 rounded-lg transition-all duration-300;
+}
+
+.btn-secondary:hover {
+  @apply bg-notary-cyan/10;
+}
+
+/* Confetti animation placeholder */
+@keyframes confetti {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(100vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+.confetti-piece {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  animation: confetti 3s ease-out forwards;
+}
