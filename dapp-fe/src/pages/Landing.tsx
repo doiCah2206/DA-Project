@@ -52,7 +52,7 @@ const Landing = () => {
                     {/* Badge */}
                     <div className="inline-flex items-center px-4 py-2 rounded-full bg-notary-cyan/10 border border-notary-cyan/20 text-notary-cyan text-sm font-medium mb-8 animate-fade-in">
                         <Zap className="w-4 h-4 mr-2" />
-                        Powered by Ethereum Blockchain
+                        Powered by Oasis Sapphire
                     </div>
 
                     {/* Headline */}
@@ -230,7 +230,7 @@ const Landing = () => {
                             </span>
                         </div>
                         <p className="text-slate-500 text-sm">
-                            © 2024 NotarizeX. Built on Ethereum.
+                            © 2024 NotarizeX. Built on Oasis Sapphire.
                         </p>
                     </div>
                 </div>
