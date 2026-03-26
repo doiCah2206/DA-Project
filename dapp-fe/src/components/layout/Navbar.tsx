@@ -74,7 +74,9 @@ const Navbar = () => {
                                             <p className="font-mono text-sm text-notary-cyan">{wallet.balance} ETH</p>
                                         </div>
                                         <button
-                                            onClick={disconnectWallet}
+                                            onClick={() => {
+                                                void disconnectWallet();
+                                            }}
                                             className="w-full flex items-center space-x-2 px-4 py-2 text-left text-red-400 hover:bg-red-500/10 transition-colors"
                                         >
                                             <LogOut className="w-4 h-4" />

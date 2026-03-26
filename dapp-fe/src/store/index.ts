@@ -14,7 +14,7 @@ interface AppStore {
     // Wallet state
     wallet: WalletState;
     connectWallet: () => Promise<void>;
-    disconnectWallet: () => void;
+    disconnectWallet: () => Promise<void>;
 
     // Documents state
     documents: NotarizedDocument[];
@@ -156,12 +156,25 @@ export const useAppStore = create<AppStore>((set) => ({
         }
     },
 
-    disconnectWallet: () => {
+    disconnectWallet: async () => {
+        const provider = getEthereumProvider();
+
+        if (provider) {
+            try {
+                await provider.request({
+                    method: 'wallet_revokePermissions',
+                    params: [{ eth_accounts: {} }],
+                });
+            } catch {
+                // Một số ví không hỗ trợ revoke quyền; vẫn tiếp tục xóa state local.
+            }
+        }
+
         set({
             wallet: {
                 address: null,
                 isConnected: false,
-                network: 'Ethereum Mainnet',
+                network: 'Oasis Sapphire Mainnet',
                 balance: '0.00',
             },
         });
