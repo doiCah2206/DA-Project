@@ -29,6 +29,14 @@ export interface WalletState {
     network: string;
     balance: string;
 }
+// export type EthereumRequestParams = {
+//     method: string;
+//     params?: unknown[];
+// };
+
+// export type EthereumProvider = {
+//     request: <T = unknown>(args: EthereumRequestParams) => Promise<T>;
+// };
 
 export interface NotarizeFormData {
     file: File | null;

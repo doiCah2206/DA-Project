@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 import type { WalletState, NotarizedDocument } from '../types';
 
+type EthereumRequestParams = {
+    method: string;
+    params?: unknown[];
+};
+
+type EthereumProvider = {
+    request: <T = unknown>(args: EthereumRequestParams) => Promise<T>;
+};
+
 interface AppStore {
     // Wallet state
     wallet: WalletState;
@@ -71,32 +80,80 @@ const MOCK_DOCUMENTS: NotarizedDocument[] = [
     },
 ];
 
+const CHAIN_NAMES: Record<string, string> = {
+    '0x1': 'Ethereum Mainnet',
+    '0x5afe': 'Oasis Sapphire Mainnet',
+    '0x5aff': 'Oasis Sapphire Testnet',
+};
+
+const getEthereumProvider = (): EthereumProvider | null => {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    return window.ethereum ?? null;
+};
+
+const formatEthBalance = (balanceHex: string): string => {
+    const wei = BigInt(balanceHex);
+    const weiPerEth = 10n ** 18n;
+    const whole = wei / weiPerEth;
+    const fraction = (wei % weiPerEth)
+        .toString()
+        .padStart(18, '0')
+        .slice(0, 4)
+        .replace(/0+$/, '');
+
+    return fraction ? `${whole}.${fraction}` : `${whole}.0`;
+};
+
 export const useAppStore = create<AppStore>((set) => ({
     // Wallet state
     wallet: {
         address: null,
         isConnected: false,
-        network: 'Ethereum Mainnet',
+        network: 'Oasis Sapphire Mainnet',
         balance: '0.00',
     },
-
     connectWallet: async () => {
-        // Mock wallet connection - simulate MetaMask
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const provider = getEthereumProvider();
 
-        // Generate random mock address
-        const mockAddress = '0x' + Array.from({ length: 40 }, () =>
-            Math.floor(Math.random() * 16).toString(16)
-        ).join('');
+        if (!provider) {
+            alert('Không tìm thấy ví Web3. Vui lòng cài MetaMask hoặc Rabby.');
+            return;
+        }
 
-        set({
-            wallet: {
-                address: mockAddress,
-                isConnected: true,
-                network: 'Ethereum Mainnet',
-                balance: (Math.random() * 10).toFixed(4),
-            },
-        });
+        try {
+            const accounts = await provider.request<string[]>({
+                method: 'eth_requestAccounts',
+            });
+
+            const address = accounts[0];
+
+            if (!address) {
+                alert('Không lấy được địa chỉ ví. Vui lòng thử lại.');
+                return;
+            }
+
+            const [balanceHex, chainId] = await Promise.all([
+                provider.request<string>({
+                    method: 'eth_getBalance',
+                    params: [address, 'latest'],
+                }),
+                provider.request<string>({ method: 'eth_chainId' }),
+            ]);
+
+            set({
+                wallet: {
+                    address,
+                    isConnected: true,
+                    network: CHAIN_NAMES[chainId] ?? `Chain ${chainId}`,
+                    balance: formatEthBalance(balanceHex),
+                },
+            });
+        } catch {
+            alert('Kết nối ví thất bại hoặc bị từ chối.');
+        }
     },
 
     disconnectWallet: () => {
