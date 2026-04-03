@@ -3,6 +3,7 @@ import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-chai-matchers";
 import "@nomicfoundation/hardhat-verify";
 import "@oasisprotocol/sapphire-hardhat";
+import "@nomicfoundation/hardhat-toolbox";
 
 import dotenv from "dotenv";
 dotenv.config();
