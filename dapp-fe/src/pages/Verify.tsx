@@ -4,11 +4,9 @@ import {
     Search, Upload, FileText, CheckCircle, XCircle, Loader2,
     Calendar, Hash, Award, ExternalLink, User
 } from 'lucide-react';
-import { useAppStore } from '../store';
 import type { NotarizedDocument } from '../types';
 
 const Verify = () => {
-    const { documents } = useAppStore();
     const [file, setFile] = useState<File | null>(null);
     const [fileHash, setFileHash] = useState('');
     const [manualHash, setManualHash] = useState('');
@@ -53,17 +51,70 @@ const Verify = () => {
         setIsVerifying(true);
         setResult(null);
 
-        // Simulate blockchain lookup delay
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        try {
+            // Bước 1 và 2 chạy SONG SONG — không chờ tx confirm
+            const [, res] = await Promise.all([
+                // Fire-and-forget: gửi tx lên chain nhưng không chờ
+                (async () => {
+                    if (window.ethereum) {
+                        try {
+                            const { BrowserProvider, Contract } = await import('ethers');
+                            const provider = new BrowserProvider(window.ethereum);
+                            const signer = await provider.getSigner();
+                            const { CONTRACT_ADDRESS, CONTRACT_ABI } = await import('../constants/contract');
+                            const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+                            const hashBytes32 = hashToVerify.startsWith('0x')
+                                ? hashToVerify
+                                : '0x' + hashToVerify;
+                            // Gửi tx — KHÔNG await tx.wait()
+                            const tx = await contract.verifyCertificate(hashBytes32);
+                            // Chờ confirm ngầm, ghi log sau — không block UI
+                            tx.wait().then(() => {
+                                console.log('AccessLogged event đã được ghi on-chain');
+                            }).catch(console.error);
+                        } catch {
+                            // Không bắt buộc
+                        }
+                    }
+                })(),
+                // Gọi BE ngay lập tức — không chờ blockchain
+                fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/verify/${hashToVerify}`)
+            ]);
+            const data = await res.json();
 
-        // Search in documents (including mock demo hashes)
-        const found = documents.find(doc => doc.fileHash === hashToVerify);
+            if (!data.found) {
+                setResult({ found: false });
+                return;
+            }
 
-        setResult({
-            found: !!found,
-            document: found,
-        });
-        setIsVerifying(false);
+            const d = data.document;
+            setResult({
+                found: true,
+                document: {
+                    id: String(d.id),
+                    tokenId: String(d.token_id ?? ''),
+                    fileHash: d.file_hash,
+                    fileName: d.file_name,
+                    fileSize: Number(d.file_size),
+                    fileType: d.file_type ?? '',
+                    title: d.title,
+                    documentType: (d.document_type ?? 'Other') as NotarizedDocument['documentType'],
+                    description: d.description ?? '',
+                    ownerName: d.owner_name ?? '',
+                    ownerAddress: d.owner_address ?? '',
+                    tags: Array.isArray(d.tags) ? d.tags : [],
+                    mintDate: new Date(d.mint_date ?? d.created_at),
+                    transactionHash: d.transaction_hash ?? '',
+                    ipfsUri: d.ipfs_uri ?? '',
+                    ipfsCid: d.ipfs_cid ?? '',
+                },
+            });
+        } catch (err) {
+            console.error('Lỗi verify:', err);
+            alert('Lỗi kết nối server khi verify.');
+        } finally {
+            setIsVerifying(false);
+        }
     };
 
     const handleManualVerify = () => {
@@ -214,30 +265,6 @@ const Verify = () => {
                         >
                             Verify
                         </button>
-                    </div>
-                </div>
-
-                {/* Demo Hashes */}
-                <div className="mb-12 p-6 rounded-2xl bg-notary-dark-secondary/50 border border-notary-slate-dark/30">
-                    <h3 className="text-slate-400 text-sm font-medium mb-4">
-                        Try with these demo hashes:
-                    </h3>
-                    <div className="space-y-2">
-                        {documents.slice(0, 3).map((doc) => (
-                            <button
-                                key={doc.id}
-                                onClick={() => {
-                                    setManualHash(doc.fileHash);
-                                    setFile(null);
-                                    setFileHash('');
-                                }}
-                                className="w-full text-left p-3 rounded-lg hover:bg-notary-dark-secondary transition-colors group"
-                            >
-                                <span className="font-mono text-xs text-slate-500 group-hover:text-notary-cyan transition-colors">
-                                    {truncateHash(doc.fileHash, 20, 12)}
-                                </span>
-                            </button>
-                        ))}
                     </div>
                 </div>
 

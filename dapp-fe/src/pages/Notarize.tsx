@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { NotarizeStep, DocumentType, NotarizeFormData, MintingStatus, NotarizedDocument } from '../types';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../constants/contract';
 
 const Notarize = () => {
     const navigate = useNavigate();
@@ -91,51 +92,105 @@ const Notarize = () => {
 
     const handleMint = async () => {
         if (!wallet.isConnected || !formData.file) return;
+        const token = useAppStore.getState().token;
+        if (!token) { alert('Chưa xác thực. Vui lòng kết nối ví lại.'); return; }
 
         setMintingStatus('preparing');
+        setMintingStep('Đang mã hóa file...');
 
-        // Simulate minting process
-        const steps = [
-            { status: 'preparing', message: 'Preparing metadata...' },
-            { status: 'uploading', message: 'Uploading to IPFS...' },
-            { status: 'minting', message: 'Minting NFT on blockchain...' },
-        ];
+        try {
+            // AES-256-GCM encrypt file trước khi upload
+            const fileBuffer = await formData.file.arrayBuffer();
+            const aesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encryptedBuffer = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, fileBuffer);
+            const rawKey = await crypto.subtle.exportKey('raw', aesKey);
+            const aesKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
+            const ivBase64 = btoa(String.fromCharCode(...iv));
 
-        for (const s of steps) {
-            setMintingStep(s.message);
-            setMintingStatus(s.status as MintingStatus);
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Upload file đã encrypt lên Pinata
+            setMintingStatus('uploading');
+            setMintingStep('Đang upload lên IPFS (Pinata)...');
+            const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
+            const pinataForm = new FormData();
+            pinataForm.append('file', encryptedBlob, formData.file.name + '.enc');
+            const pinataRes = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${import.meta.env.VITE_PINATA_JWT}` },
+                body: pinataForm,
+            });
+            if (!pinataRes.ok) throw new Error('Upload Pinata thất bại');
+            const pinataData = await pinataRes.json();
+            const ipfsCid: string = pinataData.IpfsHash;
+
+            // Gọi Smart Contract issueCertificate() thật
+            setMintingStatus('minting');
+            setMintingStep('Đang mint NFT trên blockchain...');
+            const { BrowserProvider, Contract } = await import('ethers');
+            if (!window.ethereum) throw new Error('Không tìm thấy ví Web3');
+            const browserProvider = new BrowserProvider(window.ethereum);
+            const signer = await browserProvider.getSigner();
+            const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            const hashBytes32 = formData.fileHash.startsWith('0x') ? formData.fileHash : '0x' + formData.fileHash;
+            const secretKeyPayload = JSON.stringify({ key: aesKeyBase64, iv: ivBase64 });
+            const tx = await contract.issueCertificate(
+                hashBytes32,
+                ipfsCid,
+                secretKeyPayload,           // secretKey = AES key + iv gộp lại
+                formData.title,             // projectName
+                formData.description,       // description
+            );
+            const receipt = await tx.wait();
+            const txHash: string = receipt.hash;
+            const tokenId = String(Math.floor(Math.random() * 10000) + 1000);
+
+            // Lưu document vào BE
+            const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+            const mintRes = await fetch(`${API}/documents/mint`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    tokenId, fileHash: formData.fileHash, fileName: formData.file!.name,
+                    fileSize: formData.file!.size, fileType: formData.file!.type,
+                    title: formData.title, documentType: formData.documentType,
+                    description: formData.description, ownerName: formData.ownerName,
+                    ownerAddress: wallet.address, tags: formData.tags,
+                    transactionHash: txHash, ipfsUri: `ipfs://${ipfsCid}`,
+                }),
+            });
+            const mintData = await mintRes.json();
+            if (!mintRes.ok) throw new Error(mintData.message);
+
+            // Lưu ipfs_cid vào BE
+            await fetch(`${API}/documents/${mintData.document.id}/ipfs-cid`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ ipfs_cid: ipfsCid }),
+            });
+
+            // Tạm lưu AES key vào sessionStorage để decrypt sau
+            sessionStorage.setItem(`aes_${formData.fileHash}`, JSON.stringify({ key: aesKeyBase64, iv: ivBase64 }));
+
+            const newDoc: NotarizedDocument = {
+                id: String(mintData.document.id),
+                tokenId, fileHash: formData.fileHash,
+                fileName: formData.file!.name, fileSize: formData.file!.size, fileType: formData.file!.type,
+                title: formData.title, documentType: formData.documentType,
+                description: formData.description, ownerName: formData.ownerName,
+                ownerAddress: wallet.address!, tags: formData.tags,
+                mintDate: new Date(), transactionHash: txHash,
+                ipfsUri: `ipfs://${ipfsCid}`, ipfsCid,
+            };
+            setMintedDoc(newDoc);
+            addDocument(newDoc);
+            setMintingStatus('success');
+
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Lỗi không xác định';
+            alert(`Mint thất bại: ${message}`);
+            setMintingStatus('idle');
+            setMintingStep('');
         }
-
-        // Generate mock transaction hash
-        const txHash = '0x' + Array.from({ length: 64 }, () =>
-            Math.floor(Math.random() * 16).toString(16)
-        ).join('');
-
-        // Create new document
-        const newDoc: NotarizedDocument = {
-            id: Date.now().toString(),
-            tokenId: (Math.floor(Math.random() * 10000) + 1250).toString(),
-            fileHash: formData.fileHash,
-            fileName: formData.file!.name,
-            fileSize: formData.file!.size,
-            fileType: formData.file!.type,
-            title: formData.title,
-            documentType: formData.documentType,
-            description: formData.description,
-            ownerName: formData.ownerName,
-            ownerAddress: wallet.address!,
-            tags: formData.tags,
-            mintDate: new Date(),
-            transactionHash: txHash,
-            ipfsUri: 'ipfs://Qm' + Array.from({ length: 44 }, () =>
-                Math.random().toString(36).charAt(2)
-            ).join(''),
-        };
-
-        setMintedDoc(newDoc);
-        addDocument(newDoc);
-        setMintingStatus('success');
     };
 
     const documentTypes: DocumentType[] = [

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
     Search, Filter, FileText, Calendar, Hash,
     Download, Share2, Eye, Award
@@ -7,7 +7,8 @@ import { useAppStore } from '../store';
 import type { DocumentType } from '../types';
 
 const Documents = () => {
-    const { documents, setSelectedDocument } = useAppStore();
+    const { documents, setSelectedDocument, fetchDocuments } = useAppStore();
+    useEffect(() => { void fetchDocuments(); }, []);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState<DocumentType | 'All'>('All');
     const [sortBy, setSortBy] = useState<'recent' | 'oldest'>('recent');
