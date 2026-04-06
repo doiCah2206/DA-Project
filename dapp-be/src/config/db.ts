@@ -39,6 +39,8 @@ const initializeDatabase = async () => {
                 created_at TIMESTAMP DEFAULT NOW()
             );
 
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS nonce VARCHAR(20);
+
             CREATE TABLE IF NOT EXISTS documents (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -60,6 +62,9 @@ const initializeDatabase = async () => {
                 created_at TIMESTAMP DEFAULT NOW(),
                 token_id VARCHAR(255)
             );
+
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS ipfs_cid VARCHAR(255);
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS encrypted_key TEXT;
 
             CREATE TABLE IF NOT EXISTS access_log (        -- ← THÊM: bảng log verify
                 id SERIAL PRIMARY KEY,
