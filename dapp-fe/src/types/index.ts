@@ -49,7 +49,7 @@ export interface NotarizeFormData {
     tags: string[];
 }
 
-export type NotarizeStep = 1 | 2 | 3;
+export type NotarizeStep = 1 | 2 | 3 | 4;
 
 export type MintingStatus =
     | 'idle'
