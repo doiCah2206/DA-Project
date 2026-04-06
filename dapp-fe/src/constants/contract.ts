@@ -1,4 +1,10 @@
-export const CONTRACT_ADDRESS = '0xFC021c4E49af548a07B9E54201D064f79Dfd9359'
+const envContractAddress = import.meta.env.VITE_CONTRACT_ADDRESS?.trim()
+
+if (!envContractAddress) {
+    console.warn('VITE_CONTRACT_ADDRESS chưa được set trong dapp-fe/.env')
+}
+
+export const CONTRACT_ADDRESS = envContractAddress ?? ''
 
 export const CONTRACT_ABI = [
     'function issueCertificate(bytes32 hash, string calldata ipfsCid, string calldata secretKey, string calldata projectName, string calldata description)',

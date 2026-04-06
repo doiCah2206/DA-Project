@@ -94,6 +94,10 @@ const Notarize = () => {
         if (!wallet.isConnected || !formData.file) return;
         const token = useAppStore.getState().token;
         if (!token) { alert('Chưa xác thực. Vui lòng kết nối ví lại.'); return; }
+        if (!CONTRACT_ADDRESS) {
+            alert('Thiếu CONTRACT_ADDRESS trong dapp-fe/.env');
+            return;
+        }
 
         setMintingStatus('preparing');
         setMintingStep('Đang mã hóa file...');
@@ -119,7 +123,10 @@ const Notarize = () => {
                 headers: { Authorization: `Bearer ${import.meta.env.VITE_PINATA_JWT}` },
                 body: pinataForm,
             });
-            if (!pinataRes.ok) throw new Error('Upload Pinata thất bại');
+            if (!pinataRes.ok) {
+                const pinataError = await pinataRes.text().catch(() => '');
+                throw new Error(`Upload Pinata thất bại (${pinataRes.status}): ${pinataError || 'không có phản hồi'}`);
+            }
             const pinataData = await pinataRes.json();
             const ipfsCid: string = pinataData.IpfsHash;
 
@@ -128,6 +135,17 @@ const Notarize = () => {
             setMintingStep('Đang mint NFT trên blockchain...');
             const { BrowserProvider, Contract } = await import('ethers');
             if (!window.ethereum) throw new Error('Không tìm thấy ví Web3');
+            const currentChainId = await window.ethereum.request<string>({ method: 'eth_chainId' });
+            if (currentChainId !== '0x5aff') {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x5aff' }],
+                    });
+                } catch {
+                    throw new Error('Vui lòng chuyển sang mạng Oasis Sapphire Testnet trước khi mint');
+                }
+            }
             const browserProvider = new BrowserProvider(window.ethereum);
             const signer = await browserProvider.getSigner();
             const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
@@ -159,7 +177,7 @@ const Notarize = () => {
                 }),
             });
             const mintData = await mintRes.json();
-            if (!mintRes.ok) throw new Error(mintData.message);
+            if (!mintRes.ok) throw new Error(mintData.message || `Lưu metadata thất bại (${mintRes.status})`);
 
             // Lưu ipfs_cid vào BE
             await fetch(`${API}/documents/${mintData.document.id}/ipfs-cid`, {
