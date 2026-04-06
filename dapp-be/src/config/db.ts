@@ -4,13 +4,29 @@ import dotenv from 'dotenv'
 // Đọc file .env
 dotenv.config()
 
+const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as const
+const missingEnvVars = requiredEnvVars.filter((key) => !process.env[key])
+if (missingEnvVars.length > 0) {
+    console.warn(`Thiếu biến môi trường DB: ${missingEnvVars.join(', ')}`)
+}
+
+const dbPort = Number(process.env.DB_PORT)
+if (Number.isNaN(dbPort)) {
+    console.warn('DB_PORT không hợp lệ, sẽ dùng mặc định 5432')
+}
+
 // Tạo connection pool
 const pool = new Pool({
-    host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT),
+    host: process.env.DB_HOST || 'localhost',
+    port: Number.isNaN(dbPort) ? 5432 : dbPort,
     database: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
+    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+})
+
+pool.on('error', (error) => {
+    console.error('Lỗi từ pool database:', error.message)
 })
 
 const initializeDatabase = async () => {
@@ -64,7 +80,11 @@ const initializeDatabase = async () => {
 
         console.log('Kết nối database thành công và đã kiểm tra bảng users/documents!')
     } catch (error: any) {
-        console.error('Lỗi khởi tạo database:', error.message)
+        console.error('Lỗi khởi tạo database:', {
+            message: error.message,
+            code: error.code,
+            detail: error.detail,
+        })
     }
 }
 
