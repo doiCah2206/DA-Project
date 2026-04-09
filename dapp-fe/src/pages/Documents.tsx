@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { DocumentType, NotarizedDocument } from '../types';
+import { downloadOriginalFile } from '../utils/documentDownload';
 
 type DocumentGroup = {
     key: string;
@@ -288,9 +289,14 @@ const Documents = () => {
                                                                 <Share2 className="w-4 h-4" />
                                                             </button>
                                                             <button
-                                                                onClick={() => alert('Certificate download coming soon!')}
+                                                                onClick={() => {
+                                                                    void downloadOriginalFile(version).catch((error: unknown) => {
+                                                                        const message = error instanceof Error ? error.message : 'Khong tai duoc file goc';
+                                                                        alert(message);
+                                                                    });
+                                                                }}
                                                                 className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
-                                                                title="Download Certificate"
+                                                                title="Download Original File"
                                                             >
                                                                 <Download className="w-4 h-4" />
                                                             </button>
