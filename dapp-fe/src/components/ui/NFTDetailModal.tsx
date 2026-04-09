@@ -5,6 +5,7 @@ import {
     Hash, FileText, User, Link as LinkIcon, Shield
 } from 'lucide-react';
 import { useAppStore } from '../../store';
+import { downloadOriginalFile } from '../../utils/documentDownload';
 
 const NFTDetailModal = () => {
     const { selectedDocument, setSelectedDocument } = useAppStore();
@@ -22,15 +23,10 @@ const NFTDetailModal = () => {
     };
 
     const handleDownloadCertificate = () => {
-        alert('Certificate of Notarization\n\n' +
-            `Token ID: #${selectedDocument.tokenId}\n` +
-            `Title: ${selectedDocument.title}\n` +
-            `Document Type: ${selectedDocument.documentType}\n` +
-            `Owner: ${selectedDocument.ownerName}\n` +
-            `File Hash: ${selectedDocument.fileHash}\n` +
-            `Mint Date: ${formatDate(selectedDocument.mintDate)}\n` +
-            `Transaction: ${selectedDocument.transactionHash}\n\n` +
-            'This certificate verifies that the above document has been notarized on the blockchain.');
+        void downloadOriginalFile(selectedDocument).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : 'Khong tai duoc file goc';
+            alert(message);
+        });
     };
 
     return (
@@ -243,7 +239,7 @@ const NFTDetailModal = () => {
                                         className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl bg-notary-gold text-notary-dark font-semibold hover:bg-notary-gold-dim transition-all"
                                     >
                                         <Download className="w-5 h-5" />
-                                        <span>Download Certificate</span>
+                                        <span>Download Original File</span>
                                     </button>
 
                                     <button
