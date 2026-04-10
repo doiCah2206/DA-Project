@@ -1,14 +1,17 @@
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import {
     X, ExternalLink, Download, Share2, Award, Calendar,
-    Hash, FileText, User, Link as LinkIcon, Shield
+    Hash, FileText, User, Link as LinkIcon, Shield, Loader2, AlertCircle
 } from 'lucide-react';
 import { useAppStore } from '../../store';
-import { downloadOriginalFile } from '../../utils/documentDownload';
+import { downloadOriginalFile, downloadCertificate, downloadEncryptedFile } from '../../utils/documentDownload';
 
 const NFTDetailModal = () => {
     const { selectedDocument, setSelectedDocument } = useAppStore();
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [downloadError, setDownloadError] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
 
     if (!selectedDocument) return null;
 
@@ -22,11 +25,57 @@ const NFTDetailModal = () => {
         });
     };
 
-    const handleDownloadCertificate = () => {
-        void downloadOriginalFile(selectedDocument).catch((error: unknown) => {
+    const handleDownloadOriginalFile = async () => {
+        setIsDownloading(true);
+        setDownloadError(null);
+        try {
+            await downloadOriginalFile(selectedDocument);
+        } catch (error: unknown) {
             const message = error instanceof Error ? error.message : 'Khong tai duoc file goc';
-            alert(message);
-        });
+            const normalizedMessage = message.toLowerCase();
+            const noAccess = normalizedMessage.includes('khong co quyen')
+                || normalizedMessage.includes('không có quyền')
+                || normalizedMessage.includes('khong phai vi da mint')
+                || normalizedMessage.includes('không có quyền truy cập');
+
+            if (noAccess) {
+                try {
+                    await downloadEncryptedFile(selectedDocument);
+                    setDownloadError(`${message} Da tai ban ma hoa (.enc).`);
+                    return;
+                } catch (fallbackError: unknown) {
+                    const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'Khong tai duoc file ma hoa';
+                    setDownloadError(fallbackMessage);
+                    console.error('Encrypted fallback error:', fallbackError);
+                    return;
+                }
+            }
+
+            setDownloadError(message);
+            console.error('Download error:', error);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    const handleDownloadCertificate = async () => {
+        setIsDownloading(true);
+        setDownloadError(null);
+        try {
+            downloadCertificate(selectedDocument);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Khong tai duoc certificate';
+            setDownloadError(message);
+            console.error('Certificate error:', error);
+        } finally {
+            setIsDownloading(false);
+        }
+    };
+
+    const handleCopyHash = () => {
+        navigator.clipboard.writeText(selectedDocument.transactionHash);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     return (
@@ -233,28 +282,78 @@ const NFTDetailModal = () => {
                                 </div>
 
                                 {/* Actions */}
-                                <div className="p-6 pt-0 flex flex-col sm:flex-row gap-3">
-                                    <button
-                                        onClick={handleDownloadCertificate}
-                                        className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl bg-notary-gold text-notary-dark font-semibold hover:bg-notary-gold-dim transition-all"
-                                    >
-                                        <Download className="w-5 h-5" />
-                                        <span>Download Original File</span>
-                                    </button>
+                                <div className="p-6 pt-0 space-y-3">
+                                    {/* Error Alert */}
+                                    {downloadError && (
+                                        <div className="flex items-start gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/30">
+                                            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="text-red-400 text-sm font-medium">Download Error</p>
+                                                <p className="text-red-300 text-xs mt-1">{downloadError}</p>
+                                            </div>
+                                        </div>
+                                    )}
 
-                                    <button
-                                        onClick={() => navigator.clipboard.writeText(selectedDocument.transactionHash)}
-                                        className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl border border-notary-cyan text-notary-cyan font-semibold hover:bg-notary-cyan/10 transition-all"
-                                    >
-                                        <Share2 className="w-5 h-5" />
-                                    </button>
+                                    {/* Download Buttons */}
+                                    <div className="flex flex-col sm:flex-row gap-3">
+                                        <button
+                                            onClick={handleDownloadOriginalFile}
+                                            disabled={isDownloading}
+                                            className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl bg-notary-gold text-notary-dark font-semibold hover:bg-notary-gold-dim disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                            title="Tai file goc tu IPFS (giai ma)"
+                                        >
+                                            {isDownloading ? (
+                                                <>
+                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                    <span>Dang tai...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Download className="w-5 h-5" />
+                                                    <span>Download File</span>
+                                                </>
+                                            )}
+                                        </button>
 
-                                    <button
-                                        onClick={() => alert('Coming soon!')}
-                                        className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl border border-notary-slate-dark text-slate-400 font-semibold hover:border-notary-cyan/50 hover:text-white transition-all"
-                                    >
-                                        <ExternalLink className="w-5 h-5" />
-                                    </button>
+                                        <button
+                                            onClick={handleDownloadCertificate}
+                                            disabled={isDownloading}
+                                            className="flex-1 flex items-center justify-center space-x-2 py-3 rounded-xl bg-notary-cyan/10 border border-notary-cyan text-notary-cyan font-semibold hover:bg-notary-cyan/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                            title="Tai certificate notarize (text file)"
+                                        >
+                                            {isDownloading ? (
+                                                <>
+                                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                                    <span>Dang tai...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Download className="w-5 h-5" />
+                                                    <span>Download Certificate</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    {/* Share and External Link */}
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={handleCopyHash}
+                                            className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 rounded-xl border border-notary-cyan text-notary-cyan font-semibold hover:bg-notary-cyan/10 transition-all"
+                                            title="Copy transaction hash"
+                                        >
+                                            <Share2 className="w-5 h-5" />
+                                            <span>{copied ? 'Copied!' : 'Copy Hash'}</span>
+                                        </button>
+
+                                        <button
+                                            onClick={() => alert('Coming soon!')}
+                                            className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl border border-notary-slate-dark text-slate-400 font-semibold hover:border-notary-cyan/50 hover:text-white transition-all"
+                                            title="Xem tren blockchain explorer"
+                                        >
+                                            <ExternalLink className="w-5 h-5" />
+                                        </button>
+                                    </div>
                                 </div>
                             </Dialog.Panel>
                         </Transition.Child>

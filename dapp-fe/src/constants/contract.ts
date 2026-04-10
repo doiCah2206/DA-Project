@@ -7,8 +7,8 @@ if (!envContractAddress) {
 export const CONTRACT_ADDRESS = envContractAddress ?? ''
 
 export const CONTRACT_ABI = [
-    'function issueCertificate(bytes32 hash, string calldata ipfsCid, string calldata secretKey, string calldata projectName, string calldata description)',
-    'function getMyRecord(bytes32 hash) view returns (address issuer, uint256 timestamp, bool valid, string ipfsCid, string secretKey, string projectName, string description)',
+    'function issueCertificate(bytes32 hash, string calldata ipfsCid, string calldata projectName, string calldata description)',
+    'function getMyRecord(bytes32 hash) view returns (address issuer, uint256 timestamp, bool valid, string ipfsCid, string projectName, string description)',
     'function verifyCertificate(bytes32 hash) returns (address issuer, uint256 timestamp, bool valid)',
     'function revokeCertificate(bytes32 hash)',
     'function isHashExists(bytes32 hash) view returns (bool)',
