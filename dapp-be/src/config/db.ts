@@ -4,26 +4,38 @@ import dotenv from 'dotenv'
 // Đọc file .env
 dotenv.config()
 
-const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as const
-const missingEnvVars = requiredEnvVars.filter((key) => !process.env[key])
-if (missingEnvVars.length > 0) {
-    console.warn(`Thiếu biến môi trường DB: ${missingEnvVars.join(', ')}`)
+const databaseUrl = process.env.DATABASE_URL?.trim()
+
+if (!databaseUrl) {
+    const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'] as const
+    const missingEnvVars = requiredEnvVars.filter((key) => !process.env[key])
+    if (missingEnvVars.length > 0) {
+        console.warn(`Thiếu biến môi trường DB: ${missingEnvVars.join(', ')}`)
+    }
 }
 
 const dbPort = Number(process.env.DB_PORT)
-if (Number.isNaN(dbPort)) {
+if (!databaseUrl && Number.isNaN(dbPort)) {
     console.warn('DB_PORT không hợp lệ, sẽ dùng mặc định 5432')
 }
 
+const shouldUseSsl = process.env.DB_SSL === 'true'
+    || Boolean(databaseUrl?.includes('sslmode=require'))
+
 // Tạo connection pool
-const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: Number.isNaN(dbPort) ? 5432 : dbPort,
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
-})
+const pool = new Pool(databaseUrl
+    ? {
+        connectionString: databaseUrl,
+        ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+    }
+    : {
+        host: process.env.DB_HOST || 'localhost',
+        port: Number.isNaN(dbPort) ? 5432 : dbPort,
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+    })
 
 pool.on('error', (error) => {
     console.error('Lỗi từ pool database:', error.message)
@@ -94,5 +106,9 @@ const initializeDatabase = async () => {
 }
 
 void initializeDatabase()
+
+console.log(databaseUrl
+    ? 'Database mode: DATABASE_URL (Neon/managed Postgres)'
+    : 'Database mode: DB_HOST/DB_PORT (direct connection)')
 
 export default pool
