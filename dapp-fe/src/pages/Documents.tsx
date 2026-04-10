@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
 import {
     Search, Filter, FileText, Calendar, Hash,
-    Download, Share2, Eye, Award, ChevronDown, ChevronUp, GitBranch,
+    Download, Share2, Eye, Award, ChevronDown, ChevronUp, GitBranch, Loader2, AlertCircle
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { DocumentType, NotarizedDocument } from '../types';
-import { downloadOriginalFile } from '../utils/documentDownload';
+import { downloadOriginalFile, downloadEncryptedFile } from '../utils/documentDownload';
 
 type DocumentGroup = {
     key: string;
@@ -27,6 +27,8 @@ const Documents = () => {
     const [filterType, setFilterType] = useState<DocumentType | 'All'>('All');
     const [sortBy, setSortBy] = useState<'recent' | 'oldest'>('recent');
     const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+    const [downloadingId, setDownloadingId] = useState<string | null>(null);
+    const [downloadError, setDownloadError] = useState<string | null>(null);
 
     const documentTypes: DocumentType[] = [
         'Contract',
@@ -127,6 +129,39 @@ const Documents = () => {
         }));
     };
 
+    const handleDownloadFile = async (doc: NotarizedDocument) => {
+        setDownloadingId(doc.id);
+        setDownloadError(null);
+        try {
+            await downloadOriginalFile(doc);
+        } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'Khong tai duoc file goc';
+            const normalizedMessage = message.toLowerCase();
+            const noAccess = normalizedMessage.includes('khong co quyen')
+                || normalizedMessage.includes('không có quyền')
+                || normalizedMessage.includes('khong phai vi da mint')
+                || normalizedMessage.includes('không có quyền truy cập');
+
+            if (noAccess) {
+                try {
+                    await downloadEncryptedFile(doc);
+                    setDownloadError(`${message} Da tai ban ma hoa (.enc).`);
+                    return;
+                } catch (fallbackError: unknown) {
+                    const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'Khong tai duoc file ma hoa';
+                    setDownloadError(fallbackMessage);
+                    console.error('Encrypted fallback error:', fallbackError);
+                    return;
+                }
+            }
+
+            setDownloadError(message);
+            console.error('Download error:', error);
+        } finally {
+            setDownloadingId(null);
+        }
+    };
+
     return (
         <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-7xl mx-auto">
@@ -138,6 +173,23 @@ const Documents = () => {
                         Click a document to see all its versions.
                     </p>
                 </div>
+
+                {/* Error Alert */}
+                {downloadError && (
+                    <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 animate-slide-up">
+                        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                            <p className="text-red-400 font-medium">Download Error</p>
+                            <p className="text-red-300 text-sm mt-1">{downloadError}</p>
+                        </div>
+                        <button
+                            onClick={() => setDownloadError(null)}
+                            className="text-red-400 hover:text-red-300 transition-colors ml-2"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                )}
 
                 <div className="flex flex-col sm:flex-row gap-4 mb-8">
                     <div className="relative flex-1">
@@ -290,15 +342,17 @@ const Documents = () => {
                                                             </button>
                                                             <button
                                                                 onClick={() => {
-                                                                    void downloadOriginalFile(version).catch((error: unknown) => {
-                                                                        const message = error instanceof Error ? error.message : 'Khong tai duoc file goc';
-                                                                        alert(message);
-                                                                    });
+                                                                    void handleDownloadFile(version);
                                                                 }}
-                                                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
+                                                                disabled={downloadingId === version.id}
+                                                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                                 title="Download Original File"
                                                             >
-                                                                <Download className="w-4 h-4" />
+                                                                {downloadingId === version.id ? (
+                                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                                ) : (
+                                                                    <Download className="w-4 h-4" />
+                                                                )}
                                                             </button>
                                                         </div>
                                                     </div>

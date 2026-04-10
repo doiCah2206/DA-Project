@@ -1,5 +1,4 @@
-import { BrowserProvider, Contract } from 'ethers';
-import { CONTRACT_ABI, CONTRACT_ADDRESS } from '../constants/contract';
+import { useAppStore } from '../store';
 import type { NotarizedDocument } from '../types';
 
 const formatDate = (date: Date) => {
@@ -29,11 +28,6 @@ const getIpfsGatewayUrl = (ipfsUri: string, ipfsCid?: string) => {
     }
 
     return ipfsUri;
-};
-
-const parseSecretKeyPayload = (secretKey: string) => {
-    const payload = JSON.parse(secretKey) as { key: string; iv: string };
-    return payload;
 };
 
 const base64ToArrayBuffer = (base64: string) => {
@@ -67,6 +61,56 @@ const decryptEncryptedBlob = async (encryptedBlob: Blob, secretKeyPayload: { key
     );
 
     return new Blob([decryptedBuffer]);
+};
+
+const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+
+const decodeJwtPayload = (token: string) => {
+    try {
+        const payloadBase64 = token.split('.')[1];
+        if (!payloadBase64) return null;
+        return JSON.parse(atob(payloadBase64)) as { wallet_address?: string };
+    } catch {
+        return null;
+    }
+};
+
+const getActiveWalletAddress = async () => {
+    if (!window.ethereum) {
+        throw new Error('Khong tim thay vi Web3');
+    }
+
+    const accounts = await window.ethereum.request<string[]>({ method: 'eth_accounts' });
+    const address = accounts?.[0];
+    if (!address) {
+        throw new Error('Khong tim thay vi dang ket noi. Vui long mo MetaMask va ket noi lai.');
+    }
+
+    return address.toLowerCase();
+};
+
+const requireAuthToken = () => {
+    const { token } = useAppStore.getState();
+    if (!token) {
+        throw new Error('Chua xac thuc. Vui long ket noi vi lai.');
+    }
+
+    const jwtPayload = decodeJwtPayload(token) as { exp?: number } | null;
+    if (jwtPayload?.exp && jwtPayload.exp * 1000 <= Date.now()) {
+        throw new Error('Phien dang nhap da het han. Vui long ket noi vi lai.');
+    }
+
+    return token;
+};
+
+const requireConnectedWalletSession = () => {
+    const { wallet } = useAppStore.getState();
+
+    if (!wallet.isConnected || !wallet.address) {
+        throw new Error('Chua ket noi vi trong phien hien tai. Vui long nhan Connect Wallet truoc khi tai file goc.');
+    }
+
+    return wallet.address.toLowerCase();
 };
 
 export const buildCertificateContent = (document: NotarizedDocument) => {
@@ -111,44 +155,94 @@ export const downloadCertificate = (document: NotarizedDocument) => {
     downloadTextFile(fileName, content);
 };
 
-export const downloadOriginalFile = async (document: NotarizedDocument) => {
-    if (!CONTRACT_ADDRESS) {
-        throw new Error('Missing contract address');
+export const downloadEncryptedFile = async (document: NotarizedDocument) => {
+    requireAuthToken();
+
+    if (!document.ipfsCid && !document.ipfsUri) {
+        throw new Error('Khong tim thay IPFS URI');
     }
 
-    if (!window.ethereum) {
-        throw new Error('Khong tim thay vi Web3');
-    }
-
-    const provider = new BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-    const hashBytes32 = document.fileHash.startsWith('0x') ? document.fileHash : `0x${document.fileHash}`;
-
-    const [, , , , secretKey] = await contract.getMyRecord(hashBytes32) as [
-        string,
-        bigint,
-        boolean,
-        string,
-        string,
-        string,
-        string
-    ];
-
-    const secretKeyPayload = parseSecretKeyPayload(secretKey);
     const encryptedUrl = getIpfsGatewayUrl(document.ipfsUri, document.ipfsCid);
     const response = await fetch(encryptedUrl);
 
     if (!response.ok) {
-        throw new Error(`Khong tai duoc file ma hoa (${response.status})`);
+        throw new Error(`Khong tai duoc file ma hoa (${response.status}): ${response.statusText}`);
     }
 
     const encryptedBlob = await response.blob();
+    const encryptedName = document.fileName.endsWith('.enc')
+        ? document.fileName
+        : `${document.fileName}.enc`;
+
+    downloadBlob(encryptedName, encryptedBlob);
+};
+
+export const downloadOriginalFile = async (document: NotarizedDocument) => {
+    requireAuthToken();
+
+    if (!document.ipfsCid && !document.ipfsUri) {
+        throw new Error('Khong tim thay IPFS URI');
+    }
+
+    const secretKeyPayload = await fetchSecretKeyFromApi(document);
+
+    // Download encrypted file from IPFS
+    const encryptedUrl = getIpfsGatewayUrl(document.ipfsUri, document.ipfsCid);
+    const response = await fetch(encryptedUrl);
+
+    if (!response.ok) {
+        throw new Error(`Khong tai duoc file ma hoa (${response.status}): ${response.statusText}`);
+    }
+
+    const encryptedBlob = await response.blob();
+
+    // Decrypt the file
     const decryptedBlob = await decryptEncryptedBlob(encryptedBlob, secretKeyPayload);
 
+    // Download the decrypted file
     const baseName = document.fileName.endsWith('.enc')
         ? document.fileName.slice(0, -4)
         : document.fileName;
 
     downloadBlob(baseName, decryptedBlob);
+};
+
+const fetchSecretKeyFromApi = async (document: NotarizedDocument) => {
+    const token = requireAuthToken();
+    const connectedWallet = requireConnectedWalletSession();
+    const activeWallet = await getActiveWalletAddress();
+
+    if (activeWallet !== connectedWallet) {
+        throw new Error('Vi dang active khong khop voi vi da ket noi trong phien hien tai. Vui long ket noi lai.');
+    }
+
+    const jwtPayload = decodeJwtPayload(token);
+    const jwtWallet = jwtPayload?.wallet_address?.toLowerCase();
+    if (jwtWallet && jwtWallet !== activeWallet) {
+        throw new Error('Ví MetaMask hiện tại không khớp phiên đăng nhập. Vui lòng kết nối lại ví.');
+    }
+
+    if (!document.id) {
+        throw new Error('Document khong hop le');
+    }
+
+    const response = await fetch(`${API}/documents/${document.id}/decryption-key`, {
+        headers: {
+            Authorization: `Bearer ${token}`,
+            'x-wallet-address': activeWallet,
+        },
+    });
+
+    const data = await response.json().catch(() => ({} as { message?: string }));
+    if (!response.ok) {
+        const message = data?.message || `Khong lay duoc khoa giai ma (${response.status})`;
+        throw new Error(message);
+    }
+
+    const payload = data?.decryptionKeyPayload as { key?: string; iv?: string } | undefined;
+    if (!payload?.key || !payload?.iv) {
+        throw new Error('Server tra ve decryption key khong hop le');
+    }
+
+    return { key: payload.key, iv: payload.iv };
 };

@@ -207,11 +207,9 @@ const Notarize = () => {
             const signer = await browserProvider.getSigner();
             const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
             const hashBytes32 = formData.fileHash.startsWith('0x') ? formData.fileHash : `0x${formData.fileHash}`;
-            const secretKeyPayload = JSON.stringify({ key: aesKeyBase64, iv: ivBase64 });
             const tx = await contract.issueCertificate(
                 hashBytes32,
                 ipfsCid,
-                secretKeyPayload,
                 formData.title,
                 formData.description,
             );
@@ -238,6 +236,7 @@ const Notarize = () => {
                     transactionHash: txHash,
                     ipfsUri: `ipfs://${ipfsCid}`,
                     ipfsCid,
+                    decryptionKeyPayload: { key: aesKeyBase64, iv: ivBase64 },
                 }),
             });
             const mintData = await mintRes.json();
@@ -248,8 +247,6 @@ const Notarize = () => {
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ ipfs_cid: ipfsCid }),
             });
-
-            sessionStorage.setItem(`aes_${formData.fileHash}`, JSON.stringify({ key: aesKeyBase64, iv: ivBase64 }));
 
             const newDoc: NotarizedDocument = {
                 id: String(mintData.document.id),
