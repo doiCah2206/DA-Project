@@ -2,28 +2,30 @@
 pragma solidity ^0.8.28;
 
 contract CertificateManager {
-
     address private owner;
 
     struct Certificate {
-        address issuer;    // Nguoi cap
+        address issuer; // Nguoi cap
         uint256 timestamp; // Thoi gian cap
-        bool valid;        // Trang thai
+        bool valid; // Trang thai
     }
 
     // Public info: ai cung verify duoc
     mapping(bytes32 => Certificate) private certificates;
 
     // ← THEM: 4 mapping private — chi issuer/owner doc duoc
-    mapping(bytes32 => string) private _ipfsCid;      // CID tren IPFS/Pinata
-    mapping(bytes32 => string) private _secretKey;    // AES key + iv de decrypt file
-    mapping(bytes32 => string) private _projectName;  // Ten du an / tai lieu
-    mapping(bytes32 => string) private _description;  // Mo ta
+    mapping(bytes32 => string) private _ipfsCid; // CID tren IPFS/Pinata
+    mapping(bytes32 => string) private _projectName; // Ten du an / tai lieu
+    mapping(bytes32 => string) private _description; // Mo ta
 
     // ← SUA: doi string → bytes32 de tiet kiem gas va an toan hon
     event CertificateIssued(bytes32 indexed hash, address issuer);
     event CertificateRevoked(bytes32 indexed hash);
-    event AccessLogged(bytes32 indexed hash, address verifier, uint256 timestamp);
+    event AccessLogged(
+        bytes32 indexed hash,
+        address verifier,
+        uint256 timestamp
+    );
 
     constructor() {
         owner = msg.sender;
@@ -38,28 +40,25 @@ contract CertificateManager {
         return certificates[hash].timestamp != 0;
     }
 
-    // ← SUA: them 4 param moi: ipfsCid, secretKey, projectName, description
+    // ← SUA: them 3 param moi: ipfsCid, projectName, description
     function issueCertificate(
         bytes32 hash,
         string calldata ipfsCid,
-        string calldata secretKey,
         string calldata projectName,
         string calldata description
     ) public {
-        require(hash != bytes32(0),          "CM: Hash rong");
-        require(!isHashExists(hash),          "CM: Hash da ton tai");
-        require(bytes(ipfsCid).length > 0,   "CM: IPFS CID rong");
-        require(bytes(secretKey).length > 0, "CM: Secret key rong");
+        require(hash != bytes32(0), "CM: Hash rong");
+        require(!isHashExists(hash), "CM: Hash da ton tai");
+        require(bytes(ipfsCid).length > 0, "CM: IPFS CID rong");
 
         certificates[hash] = Certificate({
-            issuer:    msg.sender,
+            issuer: msg.sender,
             timestamp: block.timestamp,
-            valid:     true
+            valid: true
         });
 
-        // ← THEM: luu 4 truong private vao mapping rieng biet
-        _ipfsCid[hash]     = ipfsCid;
-        _secretKey[hash]   = secretKey;
+        // ← THEM: luu metadata private vao mapping rieng biet
+        _ipfsCid[hash] = ipfsCid;
         _projectName[hash] = projectName;
         _description[hash] = description;
 
@@ -67,10 +66,9 @@ contract CertificateManager {
     }
 
     // Chi tra public info (issuer/timestamp/valid) — KHONG lo CID/key
-    function verifyCertificate(bytes32 hash)
-        public
-        returns (address issuer, uint256 timestamp, bool valid)
-    {
+    function verifyCertificate(
+        bytes32 hash
+    ) public returns (address issuer, uint256 timestamp, bool valid) {
         require(isHashExists(hash), "CM: Hash khong ton tai");
         Certificate memory cert = certificates[hash];
         emit AccessLogged(hash, msg.sender, block.timestamp);
@@ -78,11 +76,9 @@ contract CertificateManager {
     }
 
     // ← THEM: check quyen — chi issuer hoac contract owner moi doc duoc
-    function getCertificate(bytes32 hash)
-        public
-        view
-        returns (Certificate memory)
-    {
+    function getCertificate(
+        bytes32 hash
+    ) public view returns (Certificate memory) {
         require(isHashExists(hash), "CM: Hash khong ton tai");
         Certificate memory cert = certificates[hash];
         require(
@@ -92,8 +88,10 @@ contract CertificateManager {
         return cert;
     }
 
-    // ← THEM: ham moi — tra du 7 field ca private, chi issuer/owner doc duoc
-    function getMyRecord(bytes32 hash)
+    // ← THEM: ham moi — tra field private, chi issuer/owner doc duoc
+    function getMyRecord(
+        bytes32 hash
+    )
         public
         view
         returns (
@@ -101,7 +99,6 @@ contract CertificateManager {
             uint256 timestamp,
             bool valid,
             string memory ipfsCid,
-            string memory secretKey,
             string memory projectName,
             string memory description
         )
@@ -117,7 +114,6 @@ contract CertificateManager {
             cert.timestamp,
             cert.valid,
             _ipfsCid[hash],
-            _secretKey[hash],
             _projectName[hash],
             _description[hash]
         );
@@ -127,8 +123,11 @@ contract CertificateManager {
     function revokeCertificate(bytes32 hash) public {
         require(isHashExists(hash), "CM: Hash khong ton tai");
         Certificate storage cert = certificates[hash];
-        require(cert.issuer == msg.sender, "CM: Chi co nguoi cap moi thu hoi duoc");
-        require(cert.valid,                "CM: Da bi thu hoi roi");
+        require(
+            cert.issuer == msg.sender,
+            "CM: Chi co nguoi cap moi thu hoi duoc"
+        );
+        require(cert.valid, "CM: Da bi thu hoi roi");
         cert.valid = false;
         emit CertificateRevoked(hash);
     }
