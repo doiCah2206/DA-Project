@@ -1,15 +1,17 @@
 import { Request, Response } from 'express'
 import pool from '../config/db'
+import { decryptDecryptionPayload, encryptDecryptionPayload } from '../utils/keyEncryption'
 
 // POST /api/documents/mint — lưu document sau khi FE mint NFT xong
 export const mintDocument = async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user.userId // lấy userId từ JWT (middleware gắn vào)
+        const jwtWalletAddress = String((req as any).user.wallet_address ?? '').toLowerCase()
 
         const {
             tokenId, fileHash, fileName, fileSize, fileType,
             title, documentType, description, ownerName,
-            ownerAddress, tags, transactionHash, ipfsUri
+            ownerAddress, tags, transactionHash, ipfsUri, decryptionKeyPayload
         } = req.body
 
         // Kiểm tra field bắt buộc
@@ -26,25 +28,90 @@ export const mintDocument = async (req: Request, res: Response) => {
             return res.status(409).json({ message: 'File này đã được notarize rồi!' })
         }
 
+        if (!decryptionKeyPayload?.key || !decryptionKeyPayload?.iv) {
+            return res.status(400).json({ message: 'Thiếu decryptionKeyPayload.key hoặc decryptionKeyPayload.iv' })
+        }
+
+        const normalizedOwnerAddress = String(ownerAddress ?? '').toLowerCase()
+        if (!normalizedOwnerAddress) {
+            return res.status(400).json({ message: 'Thiếu ownerAddress' })
+        }
+
+        if (jwtWalletAddress && normalizedOwnerAddress !== jwtWalletAddress) {
+            return res.status(403).json({ message: 'ownerAddress phải khớp với ví đã xác thực.' })
+        }
+
+        const encryptedKey = await encryptDecryptionPayload({
+            key: String(decryptionKeyPayload.key),
+            iv: String(decryptionKeyPayload.iv),
+        })
+
         // Lưu vào DB, RETURNING * trả về row vừa insert
         const result = await pool.query(
             `INSERT INTO documents 
                 (user_id, token_id, file_hash, file_name, file_size, file_type,
                 title, document_type, description, owner_name, owner_address,
-                tags, transaction_hash, ipfs_uri, ipfs_cid)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+                tags, transaction_hash, ipfs_uri, ipfs_cid, encrypted_key)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
             RETURNING *`,
             [userId, tokenId, fileHash, fileName, fileSize, fileType,
-            title, documentType, description, ownerName,
-            ownerAddress, tags, transactionHash, ipfsUri,
-            req.body.ipfsCid ?? null]
+                title, documentType, description, ownerName,
+                normalizedOwnerAddress, tags, transactionHash, ipfsUri,
+                req.body.ipfsCid ?? null, encryptedKey]
         )
 
         res.status(201).json({ message: 'Notarize thành công!', document: result.rows[0] })
 
     } catch (error) {
         console.error('Lỗi mint document:', error)
-        res.status(500).json({ message: 'Lỗi server' })
+        const message = error instanceof Error ? error.message : 'Lỗi server'
+        res.status(500).json({ message })
+    }
+}
+
+// GET /api/documents/:id/decryption-key
+export const getDecryptionKey = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.userId
+        const jwtWalletAddress = String((req as any).user.wallet_address ?? '').toLowerCase()
+        const activeWalletHeader = String(req.headers['x-wallet-address'] ?? '').toLowerCase()
+        const { id } = req.params
+
+        if (!activeWalletHeader) {
+            return res.status(401).json({ message: 'Thiếu x-wallet-address' })
+        }
+
+        if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
+            return res.status(401).json({ message: 'Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.' })
+        }
+
+        const result = await pool.query(
+            `SELECT encrypted_key, owner_address FROM documents
+             WHERE id = $1 AND user_id = $2`,
+            [id, userId]
+        )
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ message: 'Không tìm thấy document hoặc không có quyền' })
+        }
+
+        const encryptedKey = result.rows[0].encrypted_key as string | null
+        const ownerAddress = String(result.rows[0].owner_address ?? '').toLowerCase()
+
+        if (ownerAddress && activeWalletHeader !== ownerAddress) {
+            return res.status(403).json({ message: 'Ví hiện tại không có quyền tải file gốc này.' })
+        }
+
+        if (!encryptedKey) {
+            return res.status(404).json({ message: 'Document không có decryption key' })
+        }
+
+        const decryptionKeyPayload = await decryptDecryptionPayload(encryptedKey)
+        return res.json({ decryptionKeyPayload })
+    } catch (error) {
+        console.error('Lỗi getDecryptionKey:', error)
+        const message = error instanceof Error ? error.message : 'Lỗi server'
+        return res.status(500).json({ message })
     }
 }
 
