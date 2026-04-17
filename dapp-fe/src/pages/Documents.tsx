@@ -6,6 +6,7 @@ import {
 import { useAppStore } from '../store';
 import type { DocumentType, NotarizedDocument } from '../types';
 import { downloadOriginalFile, downloadEncryptedFile } from '../utils/documentDownload';
+import { CustomSelect } from '../components/ui';
 
 type DocumentGroup = {
     key: string;
@@ -191,42 +192,40 @@ const Documents = () => {
                     </div>
                 )}
 
-                <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search documents..."
-                            className="w-full pl-12 pr-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
-                        />
-                    </div>
+                <div className="mb-8">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search documents..."
+                                className="w-full pl-12 pr-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+                            />
+                        </div>
 
-                    <div className="relative">
-                        <select
+                        <CustomSelect
                             value={filterType}
-                            onChange={(e) => setFilterType(e.target.value as DocumentType | 'All')}
-                            className="appearance-none w-full sm:w-48 px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all pr-10"
-                        >
-                            <option value="All">All Types</option>
-                            {documentTypes.map((type) => (
-                                <option key={type} value={type}>{type}</option>
-                            ))}
-                        </select>
-                        <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
-                    </div>
+                            onChange={(value) => setFilterType(value as DocumentType | 'All')}
+                            options={[
+                                { label: 'All Types', value: 'All' },
+                                ...documentTypes.map(type => ({ label: type, value: type }))
+                            ]}
+                            icon={<Filter className="w-5 h-5 text-slate-400" />}
+                            className="w-full sm:w-48"
+                        />
 
-                    <div className="relative">
-                        <select
+                        <CustomSelect
                             value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value as 'recent' | 'oldest')}
-                            className="appearance-none w-full sm:w-40 px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all pr-10"
-                        >
-                            <option value="recent">Most Recent</option>
-                            <option value="oldest">Oldest First</option>
-                        </select>
-                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                            onChange={(value) => setSortBy(value as 'recent' | 'oldest')}
+                            options={[
+                                { label: 'Most Recent', value: 'recent' },
+                                { label: 'Oldest First', value: 'oldest' }
+                            ]}
+                            icon={<Calendar className="w-5 h-5 text-slate-400" />}
+                            className="w-full sm:w-40"
+                        />
                     </div>
                 </div>
 

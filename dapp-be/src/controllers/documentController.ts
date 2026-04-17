@@ -19,13 +19,13 @@ export const mintDocument = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Thiếu fileHash, fileName hoặc title' })
         }
 
-        // Kiểm tra file đã notarize chưa — vì file_hash là UNIQUE
+        // Kiểm tra file đã notarize chưa cho cùng một ví
         const existing = await pool.query(
-            'SELECT id FROM documents WHERE file_hash = $1',
-            [fileHash]
+            'SELECT id FROM documents WHERE file_hash = $1 AND owner_address = $2',
+            [fileHash, String(ownerAddress ?? '').toLowerCase()]
         )
         if (existing.rows.length > 0) {
-            return res.status(409).json({ message: 'File này đã được notarize rồi!' })
+            return res.status(409).json({ message: 'File này đã được notarize rồi cho ví hiện tại!' })
         }
 
         if (!decryptionKeyPayload?.key || !decryptionKeyPayload?.iv) {
@@ -144,7 +144,7 @@ export const verifyDocument = async (req: Request, res: Response) => {
         }
 
         const result = await pool.query(
-            'SELECT * FROM documents WHERE file_hash = $1',
+            'SELECT * FROM documents WHERE file_hash = $1 ORDER BY mint_date DESC LIMIT 1',
             [hash]
         )
 

@@ -26,7 +26,7 @@ export const startContractListener = async () => {
             // Tìm document_id theo file_hash
             const hashHex = hash.replace(/^0x/, '')
             const docResult = await pool.query(
-                'SELECT id FROM documents WHERE file_hash = $1',
+                'SELECT id FROM documents WHERE file_hash = $1 ORDER BY mint_date DESC LIMIT 1',
                 [hashHex]
             )
             const documentId = docResult.rows.length > 0 ? docResult.rows[0].id : null

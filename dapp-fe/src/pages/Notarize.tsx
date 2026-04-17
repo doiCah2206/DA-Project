@@ -65,6 +65,20 @@ const Notarize = () => {
         versionGroups.find((group) => group.latest.id === selectedBaseDocumentId) ?? null
     ), [versionGroups, selectedBaseDocumentId]);
 
+    const normalizedWalletAddress = wallet.address?.trim().toLowerCase() ?? '';
+    const normalizedTitle = formData.title.trim().toLowerCase();
+    const duplicateTitleExists = versionMode === 'new' && normalizedTitle.length > 0
+        ? documents.some((doc) => doc.title.trim().toLowerCase() === normalizedTitle)
+        : false;
+    const duplicateFileExists = Boolean(
+        formData.fileHash
+        && normalizedWalletAddress
+        && documents.some((doc) => (
+            doc.fileHash.trim().toLowerCase() === formData.fileHash.trim().toLowerCase()
+            && doc.ownerAddress.trim().toLowerCase() === normalizedWalletAddress
+        ))
+    );
+
     const nextVersionNumber = versionMode === 'existing' && selectedGroup
         ? selectedGroup.versions.length + 1
         : 1;
@@ -136,9 +150,9 @@ const Notarize = () => {
                 if (versionMode === 'new') return true;
                 return selectedBaseDocumentId !== null;
             case 2:
-                return formData.file !== null;
+                return formData.file !== null && !duplicateFileExists;
             case 3:
-                return Boolean(formData.title && formData.ownerName);
+                return Boolean(formData.title && formData.ownerName) && !duplicateTitleExists && !duplicateFileExists;
             case 4:
                 return true;
             default:
@@ -148,6 +162,14 @@ const Notarize = () => {
 
     const handleMint = async () => {
         if (!wallet.isConnected || !formData.file) return;
+        if (duplicateFileExists) {
+            alert('File nay da ton tai voi vi dang nhap hien tai. Vui long chon file khac hoac dung phien ban da co neu phu hop.');
+            return;
+        }
+        if (duplicateTitleExists) {
+            alert('Document Title da ton tai. Vui long doi ten hoac chon Add New Version neu day la phien ban moi.');
+            return;
+        }
         const token = useAppStore.getState().token;
         if (!token) {
             alert('Chua xac thuc. Vui long ket noi vi lai.');
@@ -455,6 +477,12 @@ const Notarize = () => {
                             {formData.fileHash}
                         </p>
                     </div>
+
+                    {duplicateFileExists ? (
+                        <p className="mt-3 text-sm text-red-400">
+                            File hash already exists for this wallet address. Please upload a different file.
+                        </p>
+                    ) : null}
                 </div>
             )}
         </div>
@@ -478,9 +506,21 @@ const Notarize = () => {
                         type="text"
                         value={formData.title}
                         onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
+                        disabled={versionMode === 'existing'}
                         placeholder="e.g., Employment Contract - John Doe"
-                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+                        aria-invalid={duplicateTitleExists}
+                        className={`w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all disabled:cursor-not-allowed disabled:opacity-70 ${duplicateTitleExists ? 'border-red-500/60 focus:border-red-500 focus:ring-red-500/20' : 'border-notary-slate-dark'}`}
                     />
+                    {duplicateTitleExists ? (
+                        <p className="mt-2 text-xs text-red-400">
+                            Title already exists. Please use a different title for a new document, or choose Add New Version.
+                        </p>
+                    ) : null}
+                    {versionMode === 'existing' ? (
+                        <p className="mt-2 text-xs text-slate-500">
+                            Title is inherited from the selected base document.
+                        </p>
+                    ) : null}
                 </div>
 
                 <div>

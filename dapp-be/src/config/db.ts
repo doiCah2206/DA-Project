@@ -59,7 +59,7 @@ const initializeDatabase = async () => {
                 file_name VARCHAR(255) NOT NULL,
                 file_size BIGINT,
                 file_type VARCHAR(100),
-                file_hash VARCHAR(255) UNIQUE NOT NULL,
+                file_hash VARCHAR(255) NOT NULL,
                 title VARCHAR(255) NOT NULL,
                 document_type VARCHAR(50),
                 description TEXT,
@@ -77,6 +77,11 @@ const initializeDatabase = async () => {
 
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS ipfs_cid VARCHAR(255);
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS encrypted_key TEXT;
+
+            ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_file_hash_key;
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_hash_owner
+                ON documents(file_hash, owner_address);
 
             CREATE TABLE IF NOT EXISTS access_log (        -- ← THÊM: bảng log verify
                 id SERIAL PRIMARY KEY,
