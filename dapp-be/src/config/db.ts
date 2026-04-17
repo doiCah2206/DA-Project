@@ -95,9 +95,26 @@ const initializeDatabase = async () => {
                 accessed_at TIMESTAMP DEFAULT NOW()
             );
 
+            CREATE TABLE IF NOT EXISTS document_access_requests (
+                id SERIAL PRIMARY KEY,
+                document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+                requester_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                requester_wallet_address VARCHAR(255) NOT NULL,
+                requester_name VARCHAR(255),
+                message TEXT,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                resolved_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                resolved_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+
             CREATE INDEX IF NOT EXISTS idx_documents_file_hash ON documents(file_hash);
             CREATE INDEX IF NOT EXISTS idx_access_log_file_hash ON access_log(file_hash);
             CREATE INDEX IF NOT EXISTS idx_access_log_document_id ON access_log(document_id);
+            CREATE INDEX IF NOT EXISTS idx_access_requests_document_id ON document_access_requests(document_id);
+            CREATE INDEX IF NOT EXISTS idx_access_requests_requester_wallet ON document_access_requests(requester_wallet_address);
+            CREATE INDEX IF NOT EXISTS idx_access_requests_status ON document_access_requests(status);
         `)
 
         console.log('Kết nối database thành công và đã kiểm tra bảng users/documents!')

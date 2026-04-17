@@ -14,6 +14,8 @@ const Navbar = () => {
         { path: '/', label: 'Home' },
         { path: '/notarize', label: 'Notarize' },
         { path: '/documents', label: 'My Documents' },
+        { path: '/access-requests', label: 'Access Requests' },
+        { path: '/shared-documents', label: 'Shared Documents' },
         { path: '/verify', label: 'Verify' },
     ];
 

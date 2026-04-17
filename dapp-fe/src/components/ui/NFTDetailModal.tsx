@@ -8,12 +8,25 @@ import { useAppStore } from '../../store';
 import { downloadOriginalFile, downloadCertificate, downloadEncryptedFile } from '../../utils/documentDownload';
 
 const NFTDetailModal = () => {
-    const { selectedDocument, setSelectedDocument } = useAppStore();
+    const { selectedDocument, setSelectedDocument, token, wallet } = useAppStore();
     const [isDownloading, setIsDownloading] = useState(false);
     const [downloadError, setDownloadError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
+    const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+    const [requestMessage, setRequestMessage] = useState<string | null>(null);
+    const [requestError, setRequestError] = useState<string | null>(null);
 
     if (!selectedDocument) return null;
+
+    const activeWallet = wallet.address?.toLowerCase() ?? '';
+    const ownerWallet = selectedDocument.ownerAddress?.toLowerCase() ?? '';
+    const canRequestAccess = Boolean(
+        token
+        && wallet.isConnected
+        && activeWallet
+        && ownerWallet
+        && activeWallet !== ownerWallet
+    );
 
     const formatDate = (date: Date) => {
         return new Date(date).toLocaleDateString('en-US', {
@@ -76,6 +89,48 @@ const NFTDetailModal = () => {
         navigator.clipboard.writeText(selectedDocument.transactionHash);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleRequestAccess = async () => {
+        if (!token || !wallet.isConnected || !wallet.address) {
+            setRequestError('Vui lòng kết nối ví trước khi gửi yêu cầu truy cập.');
+            return;
+        }
+
+        if (wallet.address.toLowerCase() === ownerWallet) {
+            setRequestError('Bạn đang mở tài liệu bằng ví chủ sở hữu.');
+            return;
+        }
+
+        setIsRequestingAccess(true);
+        setRequestError(null);
+        setRequestMessage(null);
+
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/${selectedDocument.id}/access-requests`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                    'x-wallet-address': wallet.address,
+                },
+                body: JSON.stringify({
+                    message: `Requesting access to ${selectedDocument.title}`,
+                }),
+            });
+
+            const data = await response.json().catch(() => ({} as { message?: string }));
+            if (!response.ok) {
+                throw new Error(data.message || 'Không gửi được yêu cầu truy cập');
+            }
+
+            setRequestMessage(data.message || 'Đã gửi yêu cầu truy cập thành công.');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Không gửi được yêu cầu truy cập';
+            setRequestError(message);
+        } finally {
+            setIsRequestingAccess(false);
+        }
     };
 
     return (
@@ -264,6 +319,33 @@ const NFTDetailModal = () => {
                                         <p className="font-mono text-xs text-slate-400 break-all">
                                             {selectedDocument.ipfsUri}
                                         </p>
+                                    </div>
+
+                                    <div className="p-4 rounded-xl bg-notary-dark-secondary/50 border border-notary-slate-dark/30 space-y-2">
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div>
+                                                <span className="text-slate-500 text-xs block mb-2">Request Access</span>
+                                                <p className="text-slate-300 text-sm">
+                                                    Ask the owner to approve access to the original file.
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={handleRequestAccess}
+                                                disabled={!canRequestAccess || isRequestingAccess}
+                                                className="px-4 py-2 rounded-xl bg-notary-cyan/10 border border-notary-cyan text-notary-cyan font-semibold hover:bg-notary-cyan/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                            >
+                                                {isRequestingAccess ? 'Sending...' : 'Request Access'}
+                                            </button>
+                                        </div>
+                                        {!wallet.isConnected ? (
+                                            <p className="text-xs text-slate-500">Connect your wallet to send a request.</p>
+                                        ) : null}
+                                        {requestMessage ? (
+                                            <p className="text-xs text-notary-success">{requestMessage}</p>
+                                        ) : null}
+                                        {requestError ? (
+                                            <p className="text-xs text-red-400">{requestError}</p>
+                                        ) : null}
                                     </div>
 
                                     {/* Tags */}
