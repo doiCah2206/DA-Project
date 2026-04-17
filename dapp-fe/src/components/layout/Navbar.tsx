@@ -1,9 +1,10 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Wallet, ChevronDown, LogOut, Shield } from 'lucide-react';
-import { useAppStore } from '../../store';
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Wallet, ChevronDown, LogOut, Shield } from "lucide-react";
+import { useAppStore } from "../../store";
 
 const Navbar = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const { wallet, connectWallet, disconnectWallet } = useAppStore();
 
     const truncateAddress = (address: string) => {
@@ -11,12 +12,12 @@ const Navbar = () => {
     };
 
     const navLinks = [
-        { path: '/', label: 'Home' },
-        { path: '/notarize', label: 'Notarize' },
-        { path: '/documents', label: 'My Documents' },
-        { path: '/access-requests', label: 'Access Requests' },
-        { path: '/shared-documents', label: 'Shared Documents' },
-        { path: '/verify', label: 'Verify' },
+        { path: "/", label: "Home" },
+        { path: "/notarize", label: "Notarize" },
+        { path: "/documents", label: "My Documents" },
+        { path: "/access-requests", label: "Access Requests" },
+        { path: "/shared-documents", label: "Shared Documents" },
+        { path: "/verify", label: "Verify" },
     ];
 
     return (
@@ -39,10 +40,11 @@ const Navbar = () => {
                             <Link
                                 key={link.path}
                                 to={link.path}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${location.pathname === link.path
-                                    ? 'bg-notary-cyan/10 text-notary-cyan'
-                                    : 'text-slate-400 hover:text-white hover:bg-notary-dark-secondary'
-                                    }`}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                                    location.pathname === link.path
+                                        ? "bg-notary-cyan/10 text-notary-cyan"
+                                        : "text-slate-400 hover:text-white hover:bg-notary-dark-secondary"
+                                }`}
                             >
                                 {link.label}
                             </Link>
@@ -72,17 +74,27 @@ const Navbar = () => {
                                     {/* Dropdown */}
                                     <div className="absolute right-0 mt-2 w-48 py-2 bg-notary-dark-secondary border border-notary-cyan/20 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
                                         <div className="px-4 py-2 border-b border-notary-slate-dark">
-                                            <p className="text-xs text-slate-400">Balance</p>
-                                            <p className="font-mono text-sm text-notary-cyan">{wallet.balance} ETH</p>
+                                            <p className="text-xs text-slate-400">
+                                                Balance
+                                            </p>
+                                            <p className="font-mono text-sm text-notary-cyan">
+                                                {wallet.balance} ETH
+                                            </p>
                                         </div>
                                         <button
                                             onClick={() => {
-                                                void disconnectWallet();
+                                                void disconnectWallet().finally(
+                                                    () => {
+                                                        navigate("/");
+                                                    },
+                                                );
                                             }}
                                             className="w-full flex items-center space-x-2 px-4 py-2 text-left text-red-400 hover:bg-red-500/10 transition-colors"
                                         >
                                             <LogOut className="w-4 h-4" />
-                                            <span className="text-sm">Disconnect</span>
+                                            <span className="text-sm">
+                                                Disconnect
+                                            </span>
                                         </button>
                                     </div>
                                 </div>
