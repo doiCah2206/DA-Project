@@ -245,8 +245,7 @@ const Documents = () => {
 
     try {
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
         }/documents/${shareTarget.id}/share-by-wallet`,
         {
           method: "POST",
@@ -459,7 +458,7 @@ const Documents = () => {
                                 <Eye className="w-4 h-4" />
                                 <span>View</span>
                               </button>
-                              <button
+                              {/* <button
                                 onClick={() =>
                                   navigator.clipboard.writeText(
                                     version.transactionHash,
@@ -469,7 +468,7 @@ const Documents = () => {
                                 title="Copy Transaction Hash"
                               >
                                 <Share2 className="w-4 h-4" />
-                              </button>
+                              </button> */}
                               <button
                                 onClick={() => openShareModal(version)}
                                 className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"

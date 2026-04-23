@@ -331,11 +331,11 @@ const Notarize = () => {
         <div className="space-y-6 animate-fade-in">
             <div className="text-center mb-8">
                 <h2 className="font-heading text-2xl font-bold text-white mb-2">
-                    Chon Kieu Notarize
+                    Choose Type
                 </h2>
-                <p className="text-slate-400">
+                {/* <p className="text-slate-400">
                     Tao document moi hoac them phien ban cho document da co
-                </p>
+                </p> */}
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
@@ -722,7 +722,7 @@ const Notarize = () => {
                         <AlertCircle className="w-5 h-5 text-notary-gold mr-3" />
                         <span className="text-slate-300">Estimated Gas Fee</span>
                     </div>
-                    <span className="font-mono text-notary-gold font-semibold">~0.003 ETH</span>
+                    <span className="font-mono text-notary-gold font-semibold">~0.003 TEST</span>
                 </div>
 
                 <button

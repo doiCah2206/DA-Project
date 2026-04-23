@@ -39,8 +39,8 @@ const NFTDetailModal = () => {
     const selectedDocumentStatus =
         typeof (selectedDocument as { status?: unknown }).status === "string"
             ? String(
-                  (selectedDocument as { status?: unknown }).status,
-              ).toLowerCase()
+                (selectedDocument as { status?: unknown }).status,
+            ).toLowerCase()
             : null;
     const canRequestAccess = Boolean(
         token &&
@@ -119,8 +119,8 @@ const NFTDetailModal = () => {
         }
     };
 
-    const handleCopyHash = () => {
-        navigator.clipboard.writeText(selectedDocument.transactionHash);
+    const handleCopyFileHash = () => {
+        navigator.clipboard.writeText(selectedDocument.fileHash);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -511,9 +511,9 @@ const NFTDetailModal = () => {
                                     {/* Share and External Link */}
                                     <div className="flex gap-3">
                                         <button
-                                            onClick={handleCopyHash}
+                                            onClick={handleCopyFileHash}
                                             className="flex-1 flex items-center justify-center space-x-2 px-4 py-3 rounded-xl border border-notary-cyan text-notary-cyan font-semibold hover:bg-notary-cyan/10 transition-all"
-                                            title="Copy transaction hash"
+                                            title="Copy transaction file hash"
                                         >
                                             <Share2 className="w-5 h-5" />
                                             <span>
