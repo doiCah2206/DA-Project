@@ -613,13 +613,17 @@ export const shareDocumentByWallet = async (req: Request, res: Response) => {
       "SELECT id FROM users WHERE wallet_address = $1 LIMIT 1",
       [recipientWalletAddress],
     );
-    const recipientUserId =
-      recipientUserResult.rows.length > 0
-        ? Number(recipientUserResult.rows[0].id)
-        : null;
+
+    if (recipientUserResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Địa chỉ ví nhận chưa được đăng ký trong hệ thống." });
+    }
+
+    const recipientUserId = Number(recipientUserResult.rows[0].id);
 
     const existingResult = await pool.query(
-      `SELECT id, requester_user_id FROM document_access_requests
+      `SELECT id, status FROM document_access_requests
              WHERE document_id = $1
                AND requester_wallet_address = $2
              ORDER BY created_at DESC
@@ -627,39 +631,13 @@ export const shareDocumentByWallet = async (req: Request, res: Response) => {
       [id, recipientWalletAddress],
     );
 
-    if (existingResult.rows.length > 0) {
-      const existing = existingResult.rows[0];
-      const existingRequesterUserId =
-        existing.requester_user_id == null
-          ? null
-          : Number(existing.requester_user_id);
-      const nextRequesterUserId = existingRequesterUserId ?? recipientUserId;
-
-      const updateResult = await pool.query(
-        `UPDATE document_access_requests
-                 SET requester_user_id = $1,
-                     requester_name = $2,
-                     message = $3,
-                     status = 'approved',
-                     source = 'owner_share',
-                     resolved_by_user_id = $4,
-                     resolved_at = NOW(),
-                     updated_at = NOW()
-                 WHERE id = $5
-                 RETURNING *`,
-        [
-          nextRequesterUserId,
-          recipientWalletAddress,
-          message || null,
-          userId,
-          existing.id,
-        ],
-      );
-
-      return res.status(200).json({
-        message: "Đã chia sẻ tài liệu thành công cho ví nhận.",
-        request: updateResult.rows[0],
-      });
+    if (
+      existingResult.rows.length > 0 &&
+      existingResult.rows[0].status === "approved"
+    ) {
+      return res
+        .status(409)
+        .json({ message: "Tài liệu đã được chia sẻ cho địa chỉ ví này rồi." });
     }
 
     const insertResult = await pool.query(
