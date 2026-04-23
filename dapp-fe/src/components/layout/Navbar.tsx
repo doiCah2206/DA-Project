@@ -40,11 +40,10 @@ const Navbar = () => {
                             <Link
                                 key={link.path}
                                 to={link.path}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                                    location.pathname === link.path
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${location.pathname === link.path
                                         ? "bg-notary-cyan/10 text-notary-cyan"
                                         : "text-slate-400 hover:text-white hover:bg-notary-dark-secondary"
-                                }`}
+                                    }`}
                             >
                                 {link.label}
                             </Link>
@@ -78,7 +77,7 @@ const Navbar = () => {
                                                 Balance
                                             </p>
                                             <p className="font-mono text-sm text-notary-cyan">
-                                                {wallet.balance} ETH
+                                                {wallet.balance} TEST
                                             </p>
                                         </div>
                                         <button
