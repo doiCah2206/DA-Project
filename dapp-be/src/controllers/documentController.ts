@@ -1,447 +1,699 @@
-import { Request, Response } from 'express'
-import pool from '../config/db'
-import { decryptDecryptionPayload, encryptDecryptionPayload } from '../utils/keyEncryption'
+import { Request, Response } from "express";
+import pool from "../config/db";
+import {
+  decryptDecryptionPayload,
+  encryptDecryptionPayload,
+} from "../utils/keyEncryption";
+import { ethers } from "ethers";
 
 // POST /api/documents/mint — lưu document sau khi FE mint NFT xong
 export const mintDocument = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId // lấy userId từ JWT (middleware gắn vào)
-        const jwtWalletAddress = String((req as any).user.wallet_address ?? '').toLowerCase()
+  try {
+    const userId = (req as any).user.userId; // lấy userId từ JWT (middleware gắn vào)
+    const jwtWalletAddress = String(
+      (req as any).user.wallet_address ?? "",
+    ).toLowerCase();
 
-        const {
-            tokenId, fileHash, fileName, fileSize, fileType,
-            title, documentType, description, ownerName,
-            ownerAddress, tags, transactionHash, ipfsUri, decryptionKeyPayload
-        } = req.body
+    const {
+      tokenId,
+      fileHash,
+      fileName,
+      fileSize,
+      fileType,
+      title,
+      documentType,
+      description,
+      ownerName,
+      ownerAddress,
+      tags,
+      transactionHash,
+      ipfsUri,
+      decryptionKeyPayload,
+    } = req.body;
 
-        // Kiểm tra field bắt buộc
-        if (!fileHash || !fileName || !title) {
-            return res.status(400).json({ message: 'Thiếu fileHash, fileName hoặc title' })
-        }
+    // Kiểm tra field bắt buộc
+    if (!fileHash || !fileName || !title) {
+      return res
+        .status(400)
+        .json({ message: "Thiếu fileHash, fileName hoặc title" });
+    }
 
-        // Kiểm tra file đã notarize chưa cho cùng một ví
-        const existing = await pool.query(
-            'SELECT id FROM documents WHERE file_hash = $1 AND owner_address = $2',
-            [fileHash, String(ownerAddress ?? '').toLowerCase()]
-        )
-        if (existing.rows.length > 0) {
-            return res.status(409).json({ message: 'File này đã được notarize rồi cho ví hiện tại!' })
-        }
+    // Kiểm tra file đã notarize chưa cho cùng một ví
+    const existing = await pool.query(
+      "SELECT id FROM documents WHERE file_hash = $1 AND owner_address = $2",
+      [fileHash, String(ownerAddress ?? "").toLowerCase()],
+    );
+    if (existing.rows.length > 0) {
+      return res
+        .status(409)
+        .json({ message: "File này đã được notarize rồi cho ví hiện tại!" });
+    }
 
-        if (!decryptionKeyPayload?.key || !decryptionKeyPayload?.iv) {
-            return res.status(400).json({ message: 'Thiếu decryptionKeyPayload.key hoặc decryptionKeyPayload.iv' })
-        }
+    if (!decryptionKeyPayload?.key || !decryptionKeyPayload?.iv) {
+      return res
+        .status(400)
+        .json({
+          message:
+            "Thiếu decryptionKeyPayload.key hoặc decryptionKeyPayload.iv",
+        });
+    }
 
-        const normalizedOwnerAddress = String(ownerAddress ?? '').toLowerCase()
-        if (!normalizedOwnerAddress) {
-            return res.status(400).json({ message: 'Thiếu ownerAddress' })
-        }
+    const normalizedOwnerAddress = String(ownerAddress ?? "").toLowerCase();
+    if (!normalizedOwnerAddress) {
+      return res.status(400).json({ message: "Thiếu ownerAddress" });
+    }
 
-        if (jwtWalletAddress && normalizedOwnerAddress !== jwtWalletAddress) {
-            return res.status(403).json({ message: 'ownerAddress phải khớp với ví đã xác thực.' })
-        }
+    if (jwtWalletAddress && normalizedOwnerAddress !== jwtWalletAddress) {
+      return res
+        .status(403)
+        .json({ message: "ownerAddress phải khớp với ví đã xác thực." });
+    }
 
-        const encryptedKey = await encryptDecryptionPayload({
-            key: String(decryptionKeyPayload.key),
-            iv: String(decryptionKeyPayload.iv),
-        })
+    const encryptedKey = await encryptDecryptionPayload({
+      key: String(decryptionKeyPayload.key),
+      iv: String(decryptionKeyPayload.iv),
+    });
 
-        // Lưu vào DB, RETURNING * trả về row vừa insert
-        const result = await pool.query(
-            `INSERT INTO documents 
+    // Lưu vào DB, RETURNING * trả về row vừa insert
+    const result = await pool.query(
+      `INSERT INTO documents 
                 (user_id, token_id, file_hash, file_name, file_size, file_type,
                 title, document_type, description, owner_name, owner_address,
                 tags, transaction_hash, ipfs_uri, ipfs_cid, encrypted_key)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
             RETURNING *`,
-            [userId, tokenId, fileHash, fileName, fileSize, fileType,
-                title, documentType, description, ownerName,
-                normalizedOwnerAddress, tags, transactionHash, ipfsUri,
-                req.body.ipfsCid ?? null, encryptedKey]
-        )
+      [
+        userId,
+        tokenId,
+        fileHash,
+        fileName,
+        fileSize,
+        fileType,
+        title,
+        documentType,
+        description,
+        ownerName,
+        normalizedOwnerAddress,
+        tags,
+        transactionHash,
+        ipfsUri,
+        req.body.ipfsCid ?? null,
+        encryptedKey,
+      ],
+    );
 
-        res.status(201).json({ message: 'Notarize thành công!', document: result.rows[0] })
-
-    } catch (error) {
-        console.error('Lỗi mint document:', error)
-        const message = error instanceof Error ? error.message : 'Lỗi server'
-        res.status(500).json({ message })
-    }
-}
+    res
+      .status(201)
+      .json({ message: "Notarize thành công!", document: result.rows[0] });
+  } catch (error) {
+    console.error("Lỗi mint document:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    res.status(500).json({ message });
+  }
+};
 
 // GET /api/documents/:id/decryption-key
 export const getDecryptionKey = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId
-        const jwtWalletAddress = String((req as any).user.wallet_address ?? '').toLowerCase()
-        const activeWalletHeader = String(req.headers['x-wallet-address'] ?? '').toLowerCase()
-        const { id } = req.params
+  try {
+    const userId = (req as any).user.userId;
+    const jwtWalletAddress = String(
+      (req as any).user.wallet_address ?? "",
+    ).toLowerCase();
+    const activeWalletHeader = String(
+      req.headers["x-wallet-address"] ?? "",
+    ).toLowerCase();
+    const { id } = req.params;
 
-        if (!activeWalletHeader) {
-            return res.status(401).json({ message: 'Thiếu x-wallet-address' })
-        }
+    if (!activeWalletHeader) {
+      return res.status(401).json({ message: "Thiếu x-wallet-address" });
+    }
 
-        if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-            return res.status(401).json({ message: 'Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.' })
-        }
+    if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+        });
+    }
 
-        const result = await pool.query(
-            `SELECT encrypted_key, owner_address, user_id FROM documents
+    const result = await pool.query(
+      `SELECT encrypted_key, owner_address, user_id FROM documents
              WHERE id = $1`,
-            [id]
-        )
+      [id],
+    );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Không tìm thấy document hoặc không có quyền' })
-        }
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
 
-        const encryptedKey = result.rows[0].encrypted_key as string | null
-        const ownerAddress = String(result.rows[0].owner_address ?? '').toLowerCase()
-        const documentOwnerUserId = Number(result.rows[0].user_id)
+    const encryptedKey = result.rows[0].encrypted_key as string | null;
+    const ownerAddress = String(
+      result.rows[0].owner_address ?? "",
+    ).toLowerCase();
+    const documentOwnerUserId = Number(result.rows[0].user_id);
 
-        const accessResult = await pool.query(
-            `SELECT id FROM document_access_requests
+    const accessResult = await pool.query(
+      `SELECT id FROM document_access_requests
                          WHERE document_id = $1
-                             AND requester_user_id = $2
                              AND requester_wallet_address = $3
                              AND status = 'approved'
+                             AND (requester_user_id = $2 OR requester_user_id IS NULL)
                          LIMIT 1`,
-            [id, userId, activeWalletHeader]
-        )
+      [id, userId, activeWalletHeader],
+    );
 
-        const isOwner = documentOwnerUserId === Number(userId)
+    const isOwner = documentOwnerUserId === Number(userId);
 
-        if (ownerAddress && !isOwner && activeWalletHeader !== ownerAddress && accessResult.rows.length === 0) {
-            return res.status(403).json({ message: 'Ví hiện tại không có quyền tải file gốc này.' })
-        }
-
-        if (!encryptedKey) {
-            return res.status(404).json({ message: 'Document không có decryption key' })
-        }
-
-        const decryptionKeyPayload = await decryptDecryptionPayload(encryptedKey)
-        return res.json({ decryptionKeyPayload })
-    } catch (error) {
-        console.error('Lỗi getDecryptionKey:', error)
-        const message = error instanceof Error ? error.message : 'Lỗi server'
-        return res.status(500).json({ message })
+    if (
+      ownerAddress &&
+      !isOwner &&
+      activeWalletHeader !== ownerAddress &&
+      accessResult.rows.length === 0
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Ví hiện tại không có quyền tải file gốc này." });
     }
-}
+
+    if (!encryptedKey) {
+      return res
+        .status(404)
+        .json({ message: "Document không có decryption key" });
+    }
+
+    const decryptionKeyPayload = await decryptDecryptionPayload(encryptedKey);
+    return res.json({ decryptionKeyPayload });
+  } catch (error) {
+    console.error("Lỗi getDecryptionKey:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
 
 // POST /api/documents/:id/access-requests — người khác xin quyền truy cập tài liệu
 export const createAccessRequest = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId
-        const jwtWalletAddress = String((req as any).user.wallet_address ?? '').toLowerCase()
-        const activeWalletHeader = String(req.headers['x-wallet-address'] ?? '').toLowerCase()
-        const { id } = req.params
-        const message = String(req.body?.message ?? '').trim()
+  try {
+    const userId = (req as any).user.userId;
+    const jwtWalletAddress = String(
+      (req as any).user.wallet_address ?? "",
+    ).toLowerCase();
+    const activeWalletHeader = String(
+      req.headers["x-wallet-address"] ?? "",
+    ).toLowerCase();
+    const { id } = req.params;
+    const message = String(req.body?.message ?? "").trim();
 
-        if (!activeWalletHeader) {
-            return res.status(401).json({ message: 'Thiếu x-wallet-address' })
-        }
+    if (!activeWalletHeader) {
+      return res.status(401).json({ message: "Thiếu x-wallet-address" });
+    }
 
-        if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-            return res.status(401).json({ message: 'Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.' })
-        }
+    if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+        });
+    }
 
-        const docResult = await pool.query(
-            'SELECT id, user_id, owner_address, title FROM documents WHERE id = $1',
-            [id]
-        )
+    const docResult = await pool.query(
+      "SELECT id, user_id, owner_address, title FROM documents WHERE id = $1",
+      [id],
+    );
 
-        if (docResult.rows.length === 0) {
-            return res.status(404).json({ message: 'Không tìm thấy document' })
-        }
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy document" });
+    }
 
-        const document = docResult.rows[0]
-        const ownerAddress = String(document.owner_address ?? '').toLowerCase()
+    const document = docResult.rows[0];
+    const ownerAddress = String(document.owner_address ?? "").toLowerCase();
 
-        if (ownerAddress && ownerAddress === activeWalletHeader) {
-            return res.status(400).json({ message: 'Bạn đang là chủ tài liệu này.' })
-        }
+    if (ownerAddress && ownerAddress === activeWalletHeader) {
+      return res.status(400).json({ message: "Bạn đang là chủ tài liệu này." });
+    }
 
-        const existingRequest = await pool.query(
-            `SELECT id, status FROM document_access_requests
+    const existingRequest = await pool.query(
+      `SELECT id, status FROM document_access_requests
              WHERE document_id = $1
-               AND requester_user_id = $2
                AND requester_wallet_address = $3
              ORDER BY created_at DESC
              LIMIT 1`,
-            [id, userId, activeWalletHeader]
-        )
+      [id, activeWalletHeader],
+    );
 
-        if (existingRequest.rows[0]?.status === 'pending') {
-            return res.status(409).json({ message: 'Bạn đã gửi yêu cầu cho tài liệu này rồi.' })
-        }
-
-        if (existingRequest.rows[0]?.status === 'approved') {
-            return res.status(409).json({ message: 'Bạn đã được cấp quyền cho tài liệu này.' })
-        }
-
-        const result = await pool.query(
-            `INSERT INTO document_access_requests
-                (document_id, requester_user_id, requester_wallet_address, requester_name, message, status)
-             VALUES ($1, $2, $3, $4, $5, 'pending')
-             RETURNING *`,
-            [
-                id,
-                userId,
-                activeWalletHeader,
-                String((req as any).user.wallet_address ?? activeWalletHeader),
-                message || null,
-            ]
-        )
-
-        return res.status(201).json({
-            message: 'Đã gửi yêu cầu xin tài liệu.',
-            request: result.rows[0],
-        })
-    } catch (error) {
-        console.error('Lỗi createAccessRequest:', error)
-        const message = error instanceof Error ? error.message : 'Lỗi server'
-        return res.status(500).json({ message })
+    if (existingRequest.rows[0]?.status === "pending") {
+      return res
+        .status(409)
+        .json({ message: "Bạn đã gửi yêu cầu cho tài liệu này rồi." });
     }
-}
+
+    if (existingRequest.rows[0]?.status === "approved") {
+      return res
+        .status(409)
+        .json({ message: "Bạn đã được cấp quyền cho tài liệu này." });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO document_access_requests
+                (document_id, requester_user_id, requester_wallet_address, requester_name, message, status, source)
+             VALUES ($1, $2, $3, $4, $5, 'pending', 'recipient_request')
+             RETURNING *`,
+      [
+        id,
+        userId,
+        activeWalletHeader,
+        String((req as any).user.wallet_address ?? activeWalletHeader),
+        message || null,
+      ],
+    );
+
+    return res.status(201).json({
+      message: "Đã gửi yêu cầu xin tài liệu.",
+      request: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Lỗi createAccessRequest:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
 
 // GET /api/documents/access-requests — chủ tài liệu xem danh sách yêu cầu
-export const getAccessRequestsForOwner = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId
+export const getAccessRequestsForOwner = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const userId = (req as any).user.userId;
 
-        const result = await pool.query(
-            `SELECT r.*, d.title, d.file_name, d.owner_address, d.document_type
+    const result = await pool.query(
+      `SELECT r.*, d.title, d.file_name, d.owner_address, d.document_type
              FROM document_access_requests r
              JOIN documents d ON d.id = r.document_id
              WHERE d.user_id = $1
              ORDER BY r.created_at DESC`,
-            [userId]
-        )
+      [userId],
+    );
 
-        return res.json({ requests: result.rows })
-    } catch (error) {
-        console.error('Lỗi getAccessRequestsForOwner:', error)
-        return res.status(500).json({ message: 'Lỗi server' })
-    }
-}
+    return res.json({ requests: result.rows });
+  } catch (error) {
+    console.error("Lỗi getAccessRequestsForOwner:", error);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+};
 
 // GET /api/documents/shared-documents — tài liệu đã được duyệt cho người xin
 export const getSharedDocuments = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId
-        const jwtWalletAddress = String((req as any).user.wallet_address ?? '').toLowerCase()
-        const activeWalletHeader = String(req.headers['x-wallet-address'] ?? '').toLowerCase()
+  try {
+    const userId = (req as any).user.userId;
+    const jwtWalletAddress = String(
+      (req as any).user.wallet_address ?? "",
+    ).toLowerCase();
+    const activeWalletHeader = String(
+      req.headers["x-wallet-address"] ?? "",
+    ).toLowerCase();
 
-        if (!activeWalletHeader) {
-            return res.status(401).json({ message: 'Thiếu x-wallet-address' })
-        }
+    if (!activeWalletHeader) {
+      return res.status(401).json({ message: "Thiếu x-wallet-address" });
+    }
 
-        if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-            return res.status(401).json({ message: 'Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.' })
-        }
+    if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+        });
+    }
 
-        const result = await pool.query(
-            `SELECT
+    const result = await pool.query(
+      `SELECT
                 r.id AS request_id,
                 r.message AS request_message,
                 r.created_at AS requested_at,
                 r.resolved_at,
                 r.status,
+                                r.source,
                 d.*
              FROM document_access_requests r
              JOIN documents d ON d.id = r.document_id
-             WHERE r.requester_user_id = $1
-               AND r.requester_wallet_address = $2
+                         WHERE r.requester_wallet_address = $2
+                             AND (r.requester_user_id = $1 OR r.requester_user_id IS NULL)
                AND r.status = 'approved'
              ORDER BY r.resolved_at DESC NULLS LAST, r.created_at DESC`,
-            [userId, activeWalletHeader]
-        )
+      [userId, activeWalletHeader],
+    );
 
-        return res.json({ documents: result.rows })
-    } catch (error) {
-        console.error('Lỗi getSharedDocuments:', error)
-        return res.status(500).json({ message: 'Lỗi server' })
-    }
-}
+    return res.json({ documents: result.rows });
+  } catch (error) {
+    console.error("Lỗi getSharedDocuments:", error);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+};
 
 // PATCH /api/documents/access-requests/:requestId — duyệt hoặc từ chối yêu cầu
 export const resolveAccessRequest = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId
-        const { requestId } = req.params
-        const status = String(req.body?.status ?? '').toLowerCase()
+  try {
+    const userId = (req as any).user.userId;
+    const { requestId } = req.params;
+    const status = String(req.body?.status ?? "").toLowerCase();
 
-        if (!['approved', 'rejected'].includes(status)) {
-            return res.status(400).json({ message: 'Status không hợp lệ' })
-        }
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Status không hợp lệ" });
+    }
 
-        const requestResult = await pool.query(
-            `SELECT r.id, r.status, d.user_id
+    const requestResult = await pool.query(
+      `SELECT r.id, r.status, d.user_id
              FROM document_access_requests r
              JOIN documents d ON d.id = r.document_id
              WHERE r.id = $1 AND d.user_id = $2`,
-            [requestId, userId]
-        )
+      [requestId, userId],
+    );
 
-        if (requestResult.rows.length === 0) {
-            return res.status(404).json({ message: 'Không tìm thấy yêu cầu hoặc không có quyền' })
-        }
+    if (requestResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy yêu cầu hoặc không có quyền" });
+    }
 
-        const result = await pool.query(
-            `UPDATE document_access_requests
+    const result = await pool.query(
+      `UPDATE document_access_requests
              SET status = $1,
                  resolved_by_user_id = $2,
                  resolved_at = NOW(),
                  updated_at = NOW()
              WHERE id = $3
              RETURNING *`,
-            [status, userId, requestId]
-        )
+      [status, userId, requestId],
+    );
 
-        return res.json({
-            message: status === 'approved' ? 'Đã duyệt yêu cầu.' : 'Đã từ chối yêu cầu.',
-            request: result.rows[0],
-        })
-    } catch (error) {
-        console.error('Lỗi resolveAccessRequest:', error)
-        const message = error instanceof Error ? error.message : 'Lỗi server'
-        return res.status(500).json({ message })
-    }
-}
+    return res.json({
+      message:
+        status === "approved" ? "Đã duyệt yêu cầu." : "Đã từ chối yêu cầu.",
+      request: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Lỗi resolveAccessRequest:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
 
 // GET /api/documents — lấy danh sách document của user đang đăng nhập
 export const getMyDocuments = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId
+  try {
+    const userId = (req as any).user.userId;
 
-        // Lấy tất cả doc của user, mới nhất trước
-        const result = await pool.query(
-            'SELECT * FROM documents WHERE user_id = $1 ORDER BY mint_date DESC',
-            [userId]
-        )
+    // Lấy tất cả doc của user, mới nhất trước
+    const result = await pool.query(
+      "SELECT * FROM documents WHERE user_id = $1 ORDER BY mint_date DESC",
+      [userId],
+    );
 
-        res.json({ documents: result.rows })
-
-    } catch (error) {
-        console.error('Lỗi lấy documents:', error)
-        res.status(500).json({ message: 'Lỗi server' })
-    }
-}
+    res.json({ documents: result.rows });
+  } catch (error) {
+    console.error("Lỗi lấy documents:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+};
 
 // GET /api/documents/verify/:hash — verify file theo hash, không cần đăng nhập
 export const verifyDocument = async (req: Request, res: Response) => {
-    try {
-        const { hash } = req.params
+  try {
+    const { hash } = req.params;
 
-        if (!hash) {
-            return res.status(400).json({ message: 'Thiếu hash' })
-        }
-
-        const result = await pool.query(
-            'SELECT * FROM documents WHERE file_hash = $1 ORDER BY mint_date DESC LIMIT 1',
-            [hash]
-        )
-
-        const found = result.rows.length > 0
-        const documentId = found ? result.rows[0].id : null
-
-        // ← THÊM: ghi access_log
-        await pool.query(
-            `INSERT INTO access_log (document_id, file_hash, ip_address, user_agent, found)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [
-                documentId,
-                hash,
-                req.ip ?? req.socket.remoteAddress,
-                req.headers['user-agent'] ?? null,
-                found,
-            ]
-        )
-
-        if (!found) {
-            return res.json({ found: false })
-        }
-
-        res.json({ found: true, document: result.rows[0] })
-
-    } catch (error) {
-        console.error('Lỗi verify:', error)
-        res.status(500).json({ message: 'Lỗi server' })
+    if (!hash) {
+      return res.status(400).json({ message: "Thiếu hash" });
     }
-}
+
+    const result = await pool.query(
+      "SELECT * FROM documents WHERE file_hash = $1 ORDER BY mint_date DESC LIMIT 1",
+      [hash],
+    );
+
+    const found = result.rows.length > 0;
+    const documentId = found ? result.rows[0].id : null;
+
+    // ← THÊM: ghi access_log
+    await pool.query(
+      `INSERT INTO access_log (document_id, file_hash, ip_address, user_agent, found)
+             VALUES ($1, $2, $3, $4, $5)`,
+      [
+        documentId,
+        hash,
+        req.ip ?? req.socket.remoteAddress,
+        req.headers["user-agent"] ?? null,
+        found,
+      ],
+    );
+
+    if (!found) {
+      return res.json({ found: false });
+    }
+
+    res.json({ found: true, document: result.rows[0] });
+  } catch (error) {
+    console.error("Lỗi verify:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+};
 
 // POST /api/documents/:id/ipfs-cid
 export const saveIpfsCid = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId
-        const { id } = req.params
-        const { ipfs_cid } = req.body
+  try {
+    const userId = (req as any).user.userId;
+    const { id } = req.params;
+    const { ipfs_cid } = req.body;
 
-        if (!ipfs_cid) {
-            return res.status(400).json({ message: 'Thiếu ipfs_cid' })
-        }
+    if (!ipfs_cid) {
+      return res.status(400).json({ message: "Thiếu ipfs_cid" });
+    }
 
-        // Chỉ cho phép update document của chính user đó
-        const result = await pool.query(
-            `UPDATE documents SET ipfs_cid = $1
+    // Chỉ cho phép update document của chính user đó
+    const result = await pool.query(
+      `UPDATE documents SET ipfs_cid = $1
              WHERE id = $2 AND user_id = $3
              RETURNING *`,
-            [ipfs_cid, id, userId]
-        )
+      [ipfs_cid, id, userId],
+    );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ message: 'Không tìm thấy document hoặc không có quyền' })
-        }
-
-        res.json({ message: 'Lưu IPFS CID thành công', document: result.rows[0] })
-
-    } catch (error) {
-        console.error('Lỗi saveIpfsCid:', error)
-        res.status(500).json({ message: 'Lỗi server' })
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
     }
-}
+
+    res.json({ message: "Lưu IPFS CID thành công", document: result.rows[0] });
+  } catch (error) {
+    console.error("Lỗi saveIpfsCid:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+};
 
 // GET /api/documents/records?wallet=0x... — lấy records theo địa chỉ ví
 export const getRecordsByWallet = async (req: Request, res: Response) => {
-    try {
-        const { wallet } = req.query
-        if (!wallet) return res.status(400).json({ message: 'Thiếu wallet address' })
+  try {
+    const { wallet } = req.query;
+    if (!wallet)
+      return res.status(400).json({ message: "Thiếu wallet address" });
 
-        const result = await pool.query(
-            'SELECT * FROM documents WHERE owner_address = $1 ORDER BY mint_date DESC',
-            [String(wallet).toLowerCase()]
-        )
-        res.json({ documents: result.rows })
-    } catch (error) {
-        console.error('Lỗi getRecordsByWallet:', error)
-        res.status(500).json({ message: 'Lỗi server' })
-    }
-}
+    const result = await pool.query(
+      "SELECT * FROM documents WHERE owner_address = $1 ORDER BY mint_date DESC",
+      [String(wallet).toLowerCase()],
+    );
+    res.json({ documents: result.rows });
+  } catch (error) {
+    console.error("Lỗi getRecordsByWallet:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+};
 
 // GET /api/documents/access-log/:recordId — lấy access log của 1 document
 export const getAccessLog = async (req: Request, res: Response) => {
-    try {
-        const userId = (req as any).user.userId
-        const { recordId } = req.params
+  try {
+    const userId = (req as any).user.userId;
+    const { recordId } = req.params;
 
-        // Chỉ cho phép xem log của document thuộc về user đó
-        const docCheck = await pool.query(
-            'SELECT id FROM documents WHERE id = $1 AND user_id = $2',
-            [recordId, userId]
-        )
-        if (docCheck.rows.length === 0) {
-            return res.status(403).json({ message: 'Không có quyền xem log này' })
-        }
+    // Chỉ cho phép xem log của document thuộc về user đó
+    const docCheck = await pool.query(
+      "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
+      [recordId, userId],
+    );
+    if (docCheck.rows.length === 0) {
+      return res.status(403).json({ message: "Không có quyền xem log này" });
+    }
 
-        const result = await pool.query(
-            `SELECT * FROM access_log 
+    const result = await pool.query(
+      `SELECT * FROM access_log 
              WHERE document_id = $1 
              ORDER BY accessed_at DESC`,
-            [recordId]
-        )
-        res.json({ logs: result.rows })
-    } catch (error) {
-        console.error('Lỗi getAccessLog:', error)
-        res.status(500).json({ message: 'Lỗi server' })
+      [recordId],
+    );
+    res.json({ logs: result.rows });
+  } catch (error) {
+    console.error("Lỗi getAccessLog:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  }
+};
+
+// POST /api/documents/:id/share-by-wallet — chủ tài liệu chia sẻ trực tiếp theo địa chỉ ví (auto approved)
+export const shareDocumentByWallet = async (req: Request, res: Response) => {
+  try {
+    const userId = Number((req as any).user.userId);
+    const jwtWalletAddress = String(
+      (req as any).user.wallet_address ?? "",
+    ).toLowerCase();
+    const activeWalletHeader = String(
+      req.headers["x-wallet-address"] ?? "",
+    ).toLowerCase();
+    const { id } = req.params;
+
+    if (!activeWalletHeader) {
+      return res.status(401).json({ message: "Thiếu x-wallet-address" });
     }
-}
+
+    if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+        });
+    }
+
+    const recipientWalletRaw = String(
+      req.body?.recipientWalletAddress ?? "",
+    ).trim();
+    const message = String(req.body?.message ?? "").trim();
+
+    if (!recipientWalletRaw) {
+      return res.status(400).json({ message: "Thiếu recipientWalletAddress" });
+    }
+
+    if (!ethers.isAddress(recipientWalletRaw)) {
+      return res
+        .status(400)
+        .json({ message: "recipientWalletAddress không hợp lệ" });
+    }
+
+    const recipientWalletAddress = recipientWalletRaw.toLowerCase();
+
+    const docResult = await pool.query(
+      "SELECT id, user_id, owner_address, title FROM documents WHERE id = $1",
+      [id],
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy document" });
+    }
+
+    const document = docResult.rows[0];
+    const ownerAddress = String(document.owner_address ?? "").toLowerCase();
+    const ownerUserId = Number(document.user_id);
+
+    if (
+      ownerUserId !== userId ||
+      (ownerAddress && ownerAddress !== activeWalletHeader)
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Bạn không có quyền chia sẻ tài liệu này." });
+    }
+
+    if (recipientWalletAddress === activeWalletHeader) {
+      return res
+        .status(400)
+        .json({ message: "Không thể chia sẻ tài liệu cho chính ví của bạn." });
+    }
+
+    const recipientUserResult = await pool.query(
+      "SELECT id FROM users WHERE wallet_address = $1 LIMIT 1",
+      [recipientWalletAddress],
+    );
+    const recipientUserId =
+      recipientUserResult.rows.length > 0
+        ? Number(recipientUserResult.rows[0].id)
+        : null;
+
+    const existingResult = await pool.query(
+      `SELECT id, requester_user_id FROM document_access_requests
+             WHERE document_id = $1
+               AND requester_wallet_address = $2
+             ORDER BY created_at DESC
+             LIMIT 1`,
+      [id, recipientWalletAddress],
+    );
+
+    if (existingResult.rows.length > 0) {
+      const existing = existingResult.rows[0];
+      const existingRequesterUserId =
+        existing.requester_user_id == null
+          ? null
+          : Number(existing.requester_user_id);
+      const nextRequesterUserId = existingRequesterUserId ?? recipientUserId;
+
+      const updateResult = await pool.query(
+        `UPDATE document_access_requests
+                 SET requester_user_id = $1,
+                     requester_name = $2,
+                     message = $3,
+                     status = 'approved',
+                     source = 'owner_share',
+                     resolved_by_user_id = $4,
+                     resolved_at = NOW(),
+                     updated_at = NOW()
+                 WHERE id = $5
+                 RETURNING *`,
+        [
+          nextRequesterUserId,
+          recipientWalletAddress,
+          message || null,
+          userId,
+          existing.id,
+        ],
+      );
+
+      return res.status(200).json({
+        message: "Đã chia sẻ tài liệu thành công cho ví nhận.",
+        request: updateResult.rows[0],
+      });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO document_access_requests
+                (
+                    document_id,
+                    requester_user_id,
+                    requester_wallet_address,
+                    requester_name,
+                    message,
+                    status,
+                    source,
+                    resolved_by_user_id,
+                    resolved_at
+                )
+             VALUES ($1, $2, $3, $4, $5, 'approved', 'owner_share', $6, NOW())
+             RETURNING *`,
+      [
+        id,
+        recipientUserId,
+        recipientWalletAddress,
+        recipientWalletAddress,
+        message || null,
+        userId,
+      ],
+    );
+
+    return res.status(201).json({
+      message: "Đã chia sẻ tài liệu thành công cho ví nhận.",
+      request: insertResult.rows[0],
+    });
+  } catch (error) {
+    console.error("Lỗi shareDocumentByWallet:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
