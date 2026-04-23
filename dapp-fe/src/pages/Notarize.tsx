@@ -1,17 +1,28 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import {
     Upload, FileText, Copy, Check, ChevronRight, ChevronLeft,
-    Loader2, AlertCircle, X, Sparkles
+    Loader2, AlertCircle, X, Sparkles, GitBranch,
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { NotarizeStep, DocumentType, NotarizeFormData, MintingStatus, NotarizedDocument } from '../types';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../constants/contract';
+
+type VersionMode = 'new' | 'existing';
+
+const getVersionGroupKey = (doc: NotarizedDocument): string => {
+    const title = doc.title.trim().toLowerCase();
+    const owner = doc.ownerAddress.trim().toLowerCase();
+    return `${title}::${owner}`;
+};
 
 const Notarize = () => {
     const navigate = useNavigate();
-    const { wallet, addDocument } = useAppStore();
+    const { wallet, addDocument, documents, fetchDocuments } = useAppStore();
     const [step, setStep] = useState<NotarizeStep>(1);
+    const [versionMode, setVersionMode] = useState<VersionMode>('new');
+    const [selectedBaseDocumentId, setSelectedBaseDocumentId] = useState<string | null>(null);
     const [formData, setFormData] = useState<NotarizeFormData>({
         file: null,
         fileHash: '',
@@ -27,12 +38,42 @@ const Notarize = () => {
     const [copied, setCopied] = useState(false);
     const [mintedDoc, setMintedDoc] = useState<NotarizedDocument | null>(null);
 
-    // Compute SHA-256 hash
+    const versionGroups = useMemo(() => {
+        const map = new Map<string, { latest: NotarizedDocument; versions: NotarizedDocument[] }>();
+
+        documents.forEach((doc) => {
+            const key = getVersionGroupKey(doc);
+            const existing = map.get(key);
+            if (!existing) {
+                map.set(key, { latest: doc, versions: [doc] });
+                return;
+            }
+
+            existing.versions.push(doc);
+            if (new Date(doc.mintDate).getTime() > new Date(existing.latest.mintDate).getTime()) {
+                existing.latest = doc;
+            }
+            map.set(key, existing);
+        });
+
+        return Array.from(map.values()).sort((a, b) => (
+            new Date(b.latest.mintDate).getTime() - new Date(a.latest.mintDate).getTime()
+        ));
+    }, [documents]);
+
+    const selectedGroup = useMemo(() => (
+        versionGroups.find((group) => group.latest.id === selectedBaseDocumentId) ?? null
+    ), [versionGroups, selectedBaseDocumentId]);
+
+    const nextVersionNumber = versionMode === 'existing' && selectedGroup
+        ? selectedGroup.versions.length + 1
+        : 1;
+
     const computeHash = useCallback(async (file: File): Promise<string> => {
         const buffer = await file.arrayBuffer();
         const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
         const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
         return hashHex;
     }, []);
 
@@ -40,7 +81,7 @@ const Notarize = () => {
         const file = acceptedFiles[0];
         if (file) {
             void computeHash(file).then((hash) => {
-                setFormData(prev => ({ ...prev, file, fileHash: hash }));
+                setFormData((prev) => ({ ...prev, file, fileHash: hash }));
             });
         }
     }, [computeHash]);
@@ -58,16 +99,16 @@ const Notarize = () => {
     delete (dropzoneInputProps as { refKey?: string }).refKey;
 
     const formatFileSize = (bytes: number) => {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
-        return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
     };
 
     const getFileIcon = (type: string) => {
-        if (type.includes('pdf')) return '📄';
-        if (type.includes('image')) return '🖼️';
-        if (type.includes('doc')) return '📝';
-        return '📎';
+        if (type.includes('pdf')) return 'PDF';
+        if (type.includes('image')) return 'IMG';
+        if (type.includes('doc')) return 'DOC';
+        return 'FILE';
     };
 
     const copyToClipboard = (text: string) => {
@@ -76,13 +117,29 @@ const Notarize = () => {
         setTimeout(() => setCopied(false), 2000);
     };
 
+    const handleSelectBaseDocument = (doc: NotarizedDocument) => {
+        setSelectedBaseDocumentId(doc.id);
+        setFormData((prev) => ({
+            ...prev,
+            title: doc.title,
+            documentType: doc.documentType,
+            description: doc.description,
+            ownerName: doc.ownerName,
+            tags: doc.tags,
+        }));
+        setTagsInput(doc.tags.join(', '));
+    };
+
     const canProceed = () => {
         switch (step) {
             case 1:
-                return formData.file !== null;
+                if (versionMode === 'new') return true;
+                return selectedBaseDocumentId !== null;
             case 2:
-                return formData.title && formData.ownerName;
+                return formData.file !== null;
             case 3:
+                return Boolean(formData.title && formData.ownerName);
+            case 4:
                 return true;
             default:
                 return false;
@@ -91,51 +148,135 @@ const Notarize = () => {
 
     const handleMint = async () => {
         if (!wallet.isConnected || !formData.file) return;
-
-        setMintingStatus('preparing');
-
-        // Simulate minting process
-        const steps = [
-            { status: 'preparing', message: 'Preparing metadata...' },
-            { status: 'uploading', message: 'Uploading to IPFS...' },
-            { status: 'minting', message: 'Minting NFT on blockchain...' },
-        ];
-
-        for (const s of steps) {
-            setMintingStep(s.message);
-            setMintingStatus(s.status as MintingStatus);
-            await new Promise(resolve => setTimeout(resolve, 1500));
+        const token = useAppStore.getState().token;
+        if (!token) {
+            alert('Chua xac thuc. Vui long ket noi vi lai.');
+            return;
+        }
+        if (!CONTRACT_ADDRESS) {
+            alert('Thieu CONTRACT_ADDRESS trong dapp-fe/.env');
+            return;
         }
 
-        // Generate mock transaction hash
-        const txHash = '0x' + Array.from({ length: 64 }, () =>
-            Math.floor(Math.random() * 16).toString(16)
-        ).join('');
+        setMintingStatus('preparing');
+        setMintingStep('Dang ma hoa file...');
 
-        // Create new document
-        const newDoc: NotarizedDocument = {
-            id: Date.now().toString(),
-            tokenId: (Math.floor(Math.random() * 10000) + 1250).toString(),
-            fileHash: formData.fileHash,
-            fileName: formData.file!.name,
-            fileSize: formData.file!.size,
-            fileType: formData.file!.type,
-            title: formData.title,
-            documentType: formData.documentType,
-            description: formData.description,
-            ownerName: formData.ownerName,
-            ownerAddress: wallet.address!,
-            tags: formData.tags,
-            mintDate: new Date(),
-            transactionHash: txHash,
-            ipfsUri: 'ipfs://Qm' + Array.from({ length: 44 }, () =>
-                Math.random().toString(36).charAt(2)
-            ).join(''),
-        };
+        try {
+            const fileBuffer = await formData.file.arrayBuffer();
+            const aesKey = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encryptedBuffer = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, fileBuffer);
+            const rawKey = await crypto.subtle.exportKey('raw', aesKey);
+            const aesKeyBase64 = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
+            const ivBase64 = btoa(String.fromCharCode(...iv));
 
-        setMintedDoc(newDoc);
-        addDocument(newDoc);
-        setMintingStatus('success');
+            setMintingStatus('uploading');
+            setMintingStep('Dang upload len IPFS (Pinata)...');
+            const encryptedBlob = new Blob([encryptedBuffer], { type: 'application/octet-stream' });
+            const pinataForm = new FormData();
+            pinataForm.append('file', encryptedBlob, `${formData.file.name}.enc`);
+            const pinataRes = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${import.meta.env.VITE_PINATA_JWT}` },
+                body: pinataForm,
+            });
+            if (!pinataRes.ok) {
+                const pinataError = await pinataRes.text().catch(() => '');
+                throw new Error(`Upload Pinata that bai (${pinataRes.status}): ${pinataError || 'khong co phan hoi'}`);
+            }
+            const pinataData = await pinataRes.json();
+            const ipfsCid: string = pinataData.IpfsHash;
+
+            setMintingStatus('minting');
+            setMintingStep('Dang mint NFT tren blockchain...');
+            const { BrowserProvider, Contract } = await import('ethers');
+            if (!window.ethereum) throw new Error('Khong tim thay vi Web3');
+            const currentChainId = await window.ethereum.request<string>({ method: 'eth_chainId' });
+            if (currentChainId !== '0x5aff') {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x5aff' }],
+                    });
+                } catch {
+                    throw new Error('Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi mint');
+                }
+            }
+
+            const browserProvider = new BrowserProvider(window.ethereum);
+            const signer = await browserProvider.getSigner();
+            const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            const hashBytes32 = formData.fileHash.startsWith('0x') ? formData.fileHash : `0x${formData.fileHash}`;
+            const tx = await contract.issueCertificate(
+                hashBytes32,
+                ipfsCid,
+                formData.title,
+                formData.description,
+            );
+            const receipt = await tx.wait();
+            const txHash: string = receipt.hash;
+            const tokenId = String(Math.floor(Math.random() * 10000) + 1000);
+
+            const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+            const mintRes = await fetch(`${API}/documents/mint`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    tokenId,
+                    fileHash: formData.fileHash,
+                    fileName: formData.file.name,
+                    fileSize: formData.file.size,
+                    fileType: formData.file.type,
+                    title: formData.title,
+                    documentType: formData.documentType,
+                    description: formData.description,
+                    ownerName: formData.ownerName,
+                    ownerAddress: wallet.address,
+                    tags: formData.tags,
+                    transactionHash: txHash,
+                    ipfsUri: `ipfs://${ipfsCid}`,
+                    ipfsCid,
+                    decryptionKeyPayload: { key: aesKeyBase64, iv: ivBase64 },
+                }),
+            });
+            const mintData = await mintRes.json();
+            if (!mintRes.ok) throw new Error(mintData.message || `Luu metadata that bai (${mintRes.status})`);
+
+            await fetch(`${API}/documents/${mintData.document.id}/ipfs-cid`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ ipfs_cid: ipfsCid }),
+            });
+
+            const newDoc: NotarizedDocument = {
+                id: String(mintData.document.id),
+                tokenId,
+                fileHash: formData.fileHash,
+                fileName: formData.file.name,
+                fileSize: formData.file.size,
+                fileType: formData.file.type,
+                title: formData.title,
+                documentType: formData.documentType,
+                description: formData.description,
+                ownerName: formData.ownerName,
+                ownerAddress: wallet.address!,
+                tags: formData.tags,
+                mintDate: new Date(),
+                transactionHash: txHash,
+                ipfsUri: `ipfs://${ipfsCid}`,
+                ipfsCid,
+            };
+
+            setMintedDoc(newDoc);
+            addDocument(newDoc);
+            setMintingStatus('success');
+
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Loi khong xac dinh';
+            alert(`Mint that bai: ${message}`);
+            setMintingStatus('idle');
+            setMintingStep('');
+        }
     };
 
     const documentTypes: DocumentType[] = [
@@ -148,7 +289,7 @@ const Notarize = () => {
 
     const renderStepIndicator = () => (
         <div className="flex items-center justify-center mb-12">
-            {[1, 2, 3].map((s, index) => (
+            {[1, 2, 3, 4].map((s, index) => (
                 <div key={s} className="flex items-center">
                     <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 font-heading font-bold transition-all ${step >= s
                         ? 'bg-notary-cyan border-notary-cyan text-notary-dark'
@@ -156,9 +297,8 @@ const Notarize = () => {
                         }`}>
                         {step > s ? <Check className="w-5 h-5" /> : s}
                     </div>
-                    {index < 2 && (
-                        <div className={`w-16 sm:w-24 h-0.5 mx-2 transition-all ${step > s ? 'bg-notary-cyan' : 'bg-slate-700'
-                            }`}></div>
+                    {index < 3 && (
+                        <div className={`w-12 sm:w-20 h-0.5 mx-2 transition-all ${step > s ? 'bg-notary-cyan' : 'bg-slate-700'}`}></div>
                     )}
                 </div>
             ))}
@@ -166,13 +306,96 @@ const Notarize = () => {
     );
 
     const renderStep1 = () => (
+        <div className="space-y-6 animate-fade-in">
+            <div className="text-center mb-8">
+                <h2 className="font-heading text-2xl font-bold text-white mb-2">
+                    Chon Kieu Notarize
+                </h2>
+                <p className="text-slate-400">
+                    Tao document moi hoac them phien ban cho document da co
+                </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+                <button
+                    onClick={() => {
+                        setVersionMode('new');
+                        setSelectedBaseDocumentId(null);
+                    }}
+                    className={`text-left p-5 rounded-2xl border transition-all ${versionMode === 'new'
+                        ? 'border-notary-cyan bg-notary-cyan/10'
+                        : 'border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40'
+                        }`}
+                >
+                    <div className="flex items-center mb-3">
+                        <FileText className="w-5 h-5 mr-2 text-notary-cyan" />
+                        <h3 className="font-heading text-white font-semibold">New Document</h3>
+                    </div>
+                    <p className="text-slate-400 text-sm">
+                        Tao mot document hoan toan moi, version se bat dau tu V1.
+                    </p>
+                </button>
+
+                <button
+                    onClick={() => setVersionMode('existing')}
+                    className={`text-left p-5 rounded-2xl border transition-all ${versionMode === 'existing'
+                        ? 'border-notary-cyan bg-notary-cyan/10'
+                        : 'border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40'
+                        }`}
+                >
+                    <div className="flex items-center mb-3">
+                        <GitBranch className="w-5 h-5 mr-2 text-notary-cyan" />
+                        <h3 className="font-heading text-white font-semibold">Add New Version</h3>
+                    </div>
+                    <p className="text-slate-400 text-sm">
+                        Chon document cu va tao them phien ban moi cho no.
+                    </p>
+                </button>
+            </div>
+
+            {versionMode === 'existing' ? (
+                <div className="space-y-3">
+                    <h4 className="text-slate-300 font-semibold">Chon Document Goc</h4>
+
+                    {versionGroups.length === 0 ? (
+                        <div className="rounded-xl border border-notary-slate-dark bg-notary-dark-secondary/40 p-4 text-slate-400 text-sm">
+                            Ban chua co document nao trong My Documents de them version.
+                        </div>
+                    ) : (
+                        <div className="max-h-72 overflow-auto space-y-2 pr-1">
+                            {versionGroups.map(({ latest, versions }) => (
+                                <button
+                                    key={latest.id}
+                                    onClick={() => handleSelectBaseDocument(latest)}
+                                    className={`w-full text-left p-4 rounded-xl border transition-all ${selectedBaseDocumentId === latest.id
+                                        ? 'border-notary-cyan bg-notary-cyan/10'
+                                        : 'border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40'
+                                        }`}
+                                >
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-white font-medium">{latest.title}</span>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-notary-dark text-notary-cyan">
+                                            {versions.length} version(s)
+                                        </span>
+                                    </div>
+                                    <p className="text-slate-400 text-sm">Owner: {latest.ownerName}</p>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            ) : null}
+        </div>
+    );
+
+    const renderStep2 = () => (
         <div className="space-y-8 animate-fade-in">
             <div className="text-center mb-8">
                 <h2 className="font-heading text-2xl font-bold text-white mb-2">
-                    Upload Your File
+                    Upload File
                 </h2>
                 <p className="text-slate-400">
-                    Drag and drop any file to create its unique digital fingerprint
+                    Upload file cho {versionMode === 'existing' ? `Version ${nextVersionNumber}` : 'document moi'}
                 </p>
             </div>
 
@@ -192,13 +415,12 @@ const Notarize = () => {
                         {isDragActive ? 'Drop your file here' : 'Drag & drop your file here'}
                     </p>
                     <p className="text-slate-500">or click to browse</p>
-                    <p className="text-slate-600 text-sm mt-4">Supports any file type</p>
                 </div>
             ) : (
                 <div className="notary-card rounded-2xl p-6 animate-slide-up">
                     <div className="flex items-start justify-between mb-6">
                         <div className="flex items-center space-x-4">
-                            <div className="w-16 h-16 rounded-xl bg-notary-cyan/10 flex items-center justify-center text-3xl">
+                            <div className="w-16 h-16 rounded-xl bg-notary-cyan/10 flex items-center justify-center text-sm font-semibold text-notary-cyan">
                                 {getFileIcon(formData.file.type)}
                             </div>
                             <div>
@@ -211,7 +433,7 @@ const Notarize = () => {
                             </div>
                         </div>
                         <button
-                            onClick={() => setFormData(prev => ({ ...prev, file: null, fileHash: '' }))}
+                            onClick={() => setFormData((prev) => ({ ...prev, file: null, fileHash: '' }))}
                             className="p-2 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors"
                         >
                             <X className="w-5 h-5" />
@@ -233,24 +455,19 @@ const Notarize = () => {
                             {formData.fileHash}
                         </p>
                     </div>
-
-                    <p className="text-slate-500 text-sm mt-4 flex items-center">
-                        <span className="w-2 h-2 rounded-full bg-notary-cyan mr-2"></span>
-                        This hash is your file's unique digital fingerprint
-                    </p>
                 </div>
             )}
         </div>
     );
 
-    const renderStep2 = () => (
+    const renderStep3 = () => (
         <div className="space-y-6 animate-fade-in">
             <div className="text-center mb-8">
                 <h2 className="font-heading text-2xl font-bold text-white mb-2">
                     Fill Metadata
                 </h2>
                 <p className="text-slate-400">
-                    Provide details about your document
+                    Cap nhat thong tin document truoc khi mint
                 </p>
             </div>
 
@@ -260,7 +477,7 @@ const Notarize = () => {
                     <input
                         type="text"
                         value={formData.title}
-                        onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
                         placeholder="e.g., Employment Contract - John Doe"
                         className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     />
@@ -270,10 +487,10 @@ const Notarize = () => {
                     <label className="block text-slate-400 text-sm mb-2">Document Type *</label>
                     <select
                         value={formData.documentType}
-                        onChange={(e) => setFormData(prev => ({ ...prev, documentType: e.target.value as DocumentType }))}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, documentType: e.target.value as DocumentType }))}
                         className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     >
-                        {documentTypes.map(type => (
+                        {documentTypes.map((type) => (
                             <option key={type} value={type}>{type}</option>
                         ))}
                     </select>
@@ -283,7 +500,7 @@ const Notarize = () => {
                     <label className="block text-slate-400 text-sm mb-2">Description</label>
                     <textarea
                         value={formData.description}
-                        onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                         placeholder="Brief description of the document..."
                         rows={3}
                         className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all resize-none"
@@ -295,7 +512,7 @@ const Notarize = () => {
                     <input
                         type="text"
                         value={formData.ownerName}
-                        onChange={(e) => setFormData(prev => ({ ...prev, ownerName: e.target.value }))}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, ownerName: e.target.value }))}
                         placeholder="e.g., John Doe"
                         className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     />
@@ -308,43 +525,18 @@ const Notarize = () => {
                         value={tagsInput}
                         onChange={(e) => {
                             setTagsInput(e.target.value);
-                            const tags = e.target.value.split(',').map(t => t.trim()).filter(Boolean);
-                            setFormData(prev => ({ ...prev, tags }));
+                            const tags = e.target.value.split(',').map((t) => t.trim()).filter(Boolean);
+                            setFormData((prev) => ({ ...prev, tags }));
                         }}
                         placeholder="e.g., contract, legal, important"
                         className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     />
                 </div>
             </div>
-
-            {/* Preview Card */}
-            <div className="mt-8 p-6 rounded-2xl bg-gradient-to-br from-notary-dark-secondary to-notary-dark border border-notary-cyan/20">
-                <h3 className="text-notary-cyan text-sm font-medium mb-4">NFT Preview</h3>
-                <div className="space-y-3">
-                    <div className="flex justify-between">
-                        <span className="text-slate-400">Title</span>
-                        <span className="text-white">{formData.title || '—'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-slate-400">Type</span>
-                        <span className="text-white">{formData.documentType}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-slate-400">Owner</span>
-                        <span className="text-white">{formData.ownerName || '—'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-slate-400">File Hash</span>
-                        <span className="font-mono text-xs text-notary-cyan">
-                            {formData.fileHash.slice(0, 16)}...
-                        </span>
-                    </div>
-                </div>
-            </div>
         </div>
     );
 
-    const renderStep3 = () => {
+    const renderStep4 = () => {
         if (mintedDoc) {
             return (
                 <div className="text-center animate-fade-in">
@@ -357,7 +549,7 @@ const Notarize = () => {
                     </h2>
 
                     <p className="text-slate-400 mb-8">
-                        Your document has been permanently recorded on the blockchain
+                        {versionMode === 'existing' ? `Da tao Version ${nextVersionNumber}` : 'Da tao Version 1'} cho document.
                     </p>
 
                     <div className="notary-card rounded-2xl p-6 text-left mb-8">
@@ -385,6 +577,8 @@ const Notarize = () => {
                         <button
                             onClick={() => {
                                 setStep(1);
+                                setVersionMode('new');
+                                setSelectedBaseDocumentId(null);
                                 setFormData({
                                     file: null,
                                     fileHash: '',
@@ -428,20 +622,6 @@ const Notarize = () => {
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         {mintingStep}
                     </p>
-
-                    {/* Progress bar */}
-                    <div className="max-w-md mx-auto">
-                        <div className="h-2 bg-notary-dark-secondary rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-gradient-to-r from-notary-cyan to-purple-500 transition-all duration-500"
-                                style={{
-                                    width: mintingStatus === 'preparing' ? '33%' :
-                                        mintingStatus === 'uploading' ? '66%' :
-                                            mintingStatus === 'minting' ? '90%' : '100%'
-                                }}
-                            ></div>
-                        </div>
-                    </div>
                 </div>
             );
         }
@@ -464,6 +644,14 @@ const Notarize = () => {
                     </h3>
 
                     <div className="space-y-4">
+                        <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
+                            <span className="text-slate-400">Mode</span>
+                            <span className="text-white">{versionMode === 'existing' ? 'Add Version' : 'New Document'}</span>
+                        </div>
+                        <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
+                            <span className="text-slate-400">Version</span>
+                            <span className="text-white">V{nextVersionNumber}</span>
+                        </div>
                         <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
                             <span className="text-slate-400">Document</span>
                             <span className="text-white">{formData.file?.name}</span>
@@ -507,23 +695,31 @@ const Notarize = () => {
         );
     };
 
-    // Check wallet connection
     useEffect(() => {
         if (!wallet.isConnected) {
             navigate('/');
+            return;
         }
-    }, [wallet.isConnected, navigate]);
+        void fetchDocuments();
+    }, [wallet.isConnected, navigate, fetchDocuments]);
 
     if (!wallet.isConnected) {
         return null;
     }
+
+    const showNavigation = !(step === 4 && (mintingStatus !== 'idle' || mintedDoc));
 
     return (
         <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
             <div className="max-w-3xl mx-auto">
                 {renderStepIndicator()}
 
-                {step !== 3 || mintedDoc ? (
+                {step === 1 && renderStep1()}
+                {step === 2 && renderStep2()}
+                {step === 3 && renderStep3()}
+                {step === 4 && renderStep4()}
+
+                {showNavigation ? (
                     <div className="flex justify-between mt-8">
                         <button
                             onClick={() => step > 1 && setStep((step - 1) as NotarizeStep)}
@@ -538,22 +734,18 @@ const Notarize = () => {
                         </button>
 
                         <button
-                            onClick={() => step < 3 && setStep((step + 1) as NotarizeStep)}
-                            disabled={!canProceed()}
-                            className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-semibold transition-all ${!canProceed()
+                            onClick={() => step < 4 && setStep((step + 1) as NotarizeStep)}
+                            disabled={!canProceed() || step === 4}
+                            className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-semibold transition-all ${!canProceed() || step === 4
                                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                                 : 'bg-notary-cyan text-notary-dark hover:bg-notary-cyan-dim glow-cyan-hover'
                                 }`}
                         >
-                            <span>{step === 2 ? 'Continue' : 'Next'}</span>
+                            <span>Next</span>
                             <ChevronRight className="w-5 h-5" />
                         </button>
                     </div>
                 ) : null}
-
-                {step === 1 && renderStep1()}
-                {step === 2 && renderStep2()}
-                {step === 3 && renderStep3()}
             </div>
         </div>
     );

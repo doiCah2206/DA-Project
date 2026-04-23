@@ -21,6 +21,7 @@ export interface NotarizedDocument {
     mintDate: Date;
     transactionHash: string;
     ipfsUri: string;
+    ipfsCid?: string;
 }
 
 export interface WalletState {
@@ -29,6 +30,14 @@ export interface WalletState {
     network: string;
     balance: string;
 }
+// export type EthereumRequestParams = {
+//     method: string;
+//     params?: unknown[];
+// };
+
+// export type EthereumProvider = {
+//     request: <T = unknown>(args: EthereumRequestParams) => Promise<T>;
+// };
 
 export interface NotarizeFormData {
     file: File | null;
@@ -40,7 +49,7 @@ export interface NotarizeFormData {
     tags: string[];
 }
 
-export type NotarizeStep = 1 | 2 | 3;
+export type NotarizeStep = 1 | 2 | 3 | 4;
 
 export type MintingStatus =
     | 'idle'
