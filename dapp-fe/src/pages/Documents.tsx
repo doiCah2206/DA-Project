@@ -1,387 +1,617 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from "react";
 import {
-    Search, Filter, FileText, Calendar, Hash,
-    Download, Share2, Eye, Award, ChevronDown, ChevronUp, GitBranch, Loader2, AlertCircle
-} from 'lucide-react';
-import { useAppStore } from '../store';
-import type { DocumentType, NotarizedDocument } from '../types';
-import { downloadOriginalFile, downloadEncryptedFile } from '../utils/documentDownload';
+  Search,
+  Filter,
+  FileText,
+  Calendar,
+  Hash,
+  Download,
+  Share2,
+  Eye,
+  Award,
+  ChevronDown,
+  ChevronUp,
+  GitBranch,
+  Loader2,
+  AlertCircle,
+} from "lucide-react";
+import { useAppStore } from "../store";
+import type { DocumentType, NotarizedDocument } from "../types";
+import {
+  downloadOriginalFile,
+  downloadEncryptedFile,
+} from "../utils/documentDownload";
+import { CustomSelect } from "../components/ui";
 
 type DocumentGroup = {
-    key: string;
-    latest: NotarizedDocument;
-    versions: NotarizedDocument[];
+  key: string;
+  latest: NotarizedDocument;
+  versions: NotarizedDocument[];
 };
 
 const getVersionGroupKey = (doc: NotarizedDocument): string => {
-    const title = doc.title.trim().toLowerCase();
-    const owner = doc.ownerAddress.trim().toLowerCase();
-    return `${title}::${owner}`;
+  const title = doc.title.trim().toLowerCase();
+  const owner = doc.ownerAddress.trim().toLowerCase();
+  return `${title}::${owner}`;
 };
 
 const Documents = () => {
-    const { documents, setSelectedDocument, fetchDocuments } = useAppStore();
-    useEffect(() => { void fetchDocuments(); }, [fetchDocuments]);
+  const { documents, setSelectedDocument, fetchDocuments, token, wallet } =
+    useAppStore();
+  useEffect(() => {
+    void fetchDocuments();
+  }, [fetchDocuments]);
 
-    const [searchQuery, setSearchQuery] = useState('');
-    const [filterType, setFilterType] = useState<DocumentType | 'All'>('All');
-    const [sortBy, setSortBy] = useState<'recent' | 'oldest'>('recent');
-    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-    const [downloadingId, setDownloadingId] = useState<string | null>(null);
-    const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterType, setFilterType] = useState<DocumentType | "All">("All");
+  const [sortBy, setSortBy] = useState<"recent" | "oldest">("recent");
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [shareTarget, setShareTarget] = useState<NotarizedDocument | null>(
+    null,
+  );
+  const [shareWalletAddress, setShareWalletAddress] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
 
-    const documentTypes: DocumentType[] = [
-        'Contract',
-        'Certificate',
-        'ID Document',
-        'Legal Agreement',
-        'Other',
-    ];
+  const documentTypes: DocumentType[] = [
+    "Contract",
+    "Certificate",
+    "ID Document",
+    "Legal Agreement",
+    "Other",
+  ];
 
-    const groups = useMemo(() => {
-        const map = new Map<string, DocumentGroup>();
+  const groups = useMemo(() => {
+    const map = new Map<string, DocumentGroup>();
 
-        documents.forEach((doc) => {
-            const key = getVersionGroupKey(doc);
-            const existing = map.get(key);
-            if (!existing) {
-                map.set(key, { key, latest: doc, versions: [doc] });
-                return;
-            }
+    documents.forEach((doc) => {
+      const key = getVersionGroupKey(doc);
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { key, latest: doc, versions: [doc] });
+        return;
+      }
 
-            existing.versions.push(doc);
-            if (new Date(doc.mintDate).getTime() > new Date(existing.latest.mintDate).getTime()) {
-                existing.latest = doc;
-            }
-            map.set(key, existing);
-        });
+      existing.versions.push(doc);
+      if (
+        new Date(doc.mintDate).getTime() >
+        new Date(existing.latest.mintDate).getTime()
+      ) {
+        existing.latest = doc;
+      }
+      map.set(key, existing);
+    });
 
-        return Array.from(map.values()).map((group) => ({
-            ...group,
-            versions: [...group.versions].sort((a, b) => (
-                new Date(b.mintDate).getTime() - new Date(a.mintDate).getTime()
-            )),
-        }));
-    }, [documents]);
+    return Array.from(map.values()).map((group) => ({
+      ...group,
+      versions: [...group.versions].sort(
+        (a, b) =>
+          new Date(b.mintDate).getTime() - new Date(a.mintDate).getTime(),
+      ),
+    }));
+  }, [documents]);
 
-    const filteredGroups = useMemo(() => {
-        let filtered = [...groups];
+  const filteredGroups = useMemo(() => {
+    let filtered = [...groups];
 
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            filtered = filtered.filter((group) => (
-                group.versions.some((doc) => (
-                    doc.title.toLowerCase().includes(query)
-                    || doc.fileName.toLowerCase().includes(query)
-                    || doc.description.toLowerCase().includes(query)
-                    || doc.tags.some((tag) => tag.toLowerCase().includes(query))
-                ))
-            ));
-        }
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((group) =>
+        group.versions.some(
+          (doc) =>
+            doc.title.toLowerCase().includes(query) ||
+            doc.fileName.toLowerCase().includes(query) ||
+            doc.description.toLowerCase().includes(query) ||
+            doc.tags.some((tag) => tag.toLowerCase().includes(query)),
+        ),
+      );
+    }
 
-        if (filterType !== 'All') {
-            filtered = filtered.filter((group) => (
-                group.versions.some((doc) => doc.documentType === filterType)
-            ));
-        }
+    if (filterType !== "All") {
+      filtered = filtered.filter((group) =>
+        group.versions.some((doc) => doc.documentType === filterType),
+      );
+    }
 
-        filtered.sort((a, b) => {
-            const dateA = new Date(a.latest.mintDate).getTime();
-            const dateB = new Date(b.latest.mintDate).getTime();
-            return sortBy === 'recent' ? dateB - dateA : dateA - dateB;
-        });
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.latest.mintDate).getTime();
+      const dateB = new Date(b.latest.mintDate).getTime();
+      return sortBy === "recent" ? dateB - dateA : dateA - dateB;
+    });
 
-        return filtered;
-    }, [groups, searchQuery, filterType, sortBy]);
+    return filtered;
+  }, [groups, searchQuery, filterType, sortBy]);
 
-    const formatDate = (date: Date) => {
-        return new Date(date).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-        });
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const truncateHash = (hash: string, start = 8, end = 6) =>
+    `${hash.slice(0, start)}...${hash.slice(-end)}`;
+
+  const getFileIcon = (type: string) => {
+    if (type.includes("pdf")) return "PDF";
+    if (type.includes("image")) return "IMG";
+    if (type.includes("doc")) return "DOC";
+    return "FILE";
+  };
+
+  const getTypeColor = (type: DocumentType) => {
+    const colors: Record<DocumentType, string> = {
+      Contract: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+      Certificate: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+      "ID Document": "bg-green-500/20 text-green-400 border-green-500/30",
+      "Legal Agreement":
+        "bg-orange-500/20 text-orange-400 border-orange-500/30",
+      Other: "bg-slate-500/20 text-slate-400 border-slate-500/30",
     };
+    return colors[type];
+  };
 
-    const truncateHash = (hash: string, start = 8, end = 6) => `${hash.slice(0, start)}...${hash.slice(-end)}`;
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
 
-    const getFileIcon = (type: string) => {
-        if (type.includes('pdf')) return 'PDF';
-        if (type.includes('image')) return 'IMG';
-        if (type.includes('doc')) return 'DOC';
-        return 'FILE';
-    };
+  const handleDownloadFile = async (doc: NotarizedDocument) => {
+    setDownloadingId(doc.id);
+    setDownloadError(null);
+    try {
+      await downloadOriginalFile(doc);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Khong tai duoc file goc";
+      const normalizedMessage = message.toLowerCase();
+      const noAccess =
+        normalizedMessage.includes("khong co quyen") ||
+        normalizedMessage.includes("không có quyền") ||
+        normalizedMessage.includes("khong phai vi da mint") ||
+        normalizedMessage.includes("không có quyền truy cập");
 
-    const getTypeColor = (type: DocumentType) => {
-        const colors: Record<DocumentType, string> = {
-            Contract: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-            Certificate: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-            'ID Document': 'bg-green-500/20 text-green-400 border-green-500/30',
-            'Legal Agreement': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-            Other: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-        };
-        return colors[type];
-    };
-
-    const toggleGroup = (groupKey: string) => {
-        setExpandedGroups((prev) => ({
-            ...prev,
-            [groupKey]: !prev[groupKey],
-        }));
-    };
-
-    const handleDownloadFile = async (doc: NotarizedDocument) => {
-        setDownloadingId(doc.id);
-        setDownloadError(null);
+      if (noAccess) {
         try {
-            await downloadOriginalFile(doc);
-        } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : 'Khong tai duoc file goc';
-            const normalizedMessage = message.toLowerCase();
-            const noAccess = normalizedMessage.includes('khong co quyen')
-                || normalizedMessage.includes('không có quyền')
-                || normalizedMessage.includes('khong phai vi da mint')
-                || normalizedMessage.includes('không có quyền truy cập');
-
-            if (noAccess) {
-                try {
-                    await downloadEncryptedFile(doc);
-                    setDownloadError(`${message} Da tai ban ma hoa (.enc).`);
-                    return;
-                } catch (fallbackError: unknown) {
-                    const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'Khong tai duoc file ma hoa';
-                    setDownloadError(fallbackMessage);
-                    console.error('Encrypted fallback error:', fallbackError);
-                    return;
-                }
-            }
-
-            setDownloadError(message);
-            console.error('Download error:', error);
-        } finally {
-            setDownloadingId(null);
+          await downloadEncryptedFile(doc);
+          setDownloadError(`${message} Da tai ban ma hoa (.enc).`);
+          return;
+        } catch (fallbackError: unknown) {
+          const fallbackMessage =
+            fallbackError instanceof Error
+              ? fallbackError.message
+              : "Khong tai duoc file ma hoa";
+          setDownloadError(fallbackMessage);
+          console.error("Encrypted fallback error:", fallbackError);
+          return;
         }
-    };
+      }
 
-    return (
-        <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-7xl mx-auto">
-                <div className="mb-8">
-                    <h1 className="font-heading text-3xl font-bold text-white mb-2">
-                        My Documents
-                    </h1>
-                    <p className="text-slate-400">
-                        Click a document to see all its versions.
-                    </p>
-                </div>
+      setDownloadError(message);
+      console.error("Download error:", error);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
-                {/* Error Alert */}
-                {downloadError && (
-                    <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 animate-slide-up">
-                        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                            <p className="text-red-400 font-medium">Download Error</p>
-                            <p className="text-red-300 text-sm mt-1">{downloadError}</p>
-                        </div>
-                        <button
-                            onClick={() => setDownloadError(null)}
-                            className="text-red-400 hover:text-red-300 transition-colors ml-2"
-                        >
-                            ✕
-                        </button>
-                    </div>
-                )}
+  const openShareModal = (doc: NotarizedDocument) => {
+    setShareTarget(doc);
+    setShareWalletAddress("");
+    setShareMessage("Shared directly by owner.");
+    setShareError(null);
+    setShareSuccess(null);
+  };
 
-                <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search documents..."
-                            className="w-full pl-12 pr-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
-                        />
-                    </div>
+  const closeShareModal = () => {
+    if (isSharing) return;
+    setShareTarget(null);
+    setShareWalletAddress("");
+    setShareMessage("");
+    setShareError(null);
+    setShareSuccess(null);
+  };
 
-                    <div className="relative">
-                        <select
-                            value={filterType}
-                            onChange={(e) => setFilterType(e.target.value as DocumentType | 'All')}
-                            className="appearance-none w-full sm:w-48 px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all pr-10"
-                        >
-                            <option value="All">All Types</option>
-                            {documentTypes.map((type) => (
-                                <option key={type} value={type}>{type}</option>
-                            ))}
-                        </select>
-                        <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
-                    </div>
+  const handleShareByWallet = async () => {
+    if (!shareTarget) return;
 
-                    <div className="relative">
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value as 'recent' | 'oldest')}
-                            className="appearance-none w-full sm:w-40 px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all pr-10"
-                        >
-                            <option value="recent">Most Recent</option>
-                            <option value="oldest">Oldest First</option>
-                        </select>
-                        <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
-                    </div>
-                </div>
+    if (!token) {
+      setShareError("Chua xac thuc. Vui long ket noi vi lai.");
+      return;
+    }
 
-                <p className="text-slate-500 text-sm mb-6">
-                    Showing {filteredGroups.length} document groups ({documents.length} total versions)
-                </p>
+    if (!wallet.isConnected || !wallet.address) {
+      setShareError("Vui long ket noi vi truoc khi chia se.");
+      return;
+    }
 
-                {filteredGroups.length > 0 ? (
-                    <div className="space-y-5">
-                        {filteredGroups.map((group, index) => {
-                            const expanded = Boolean(expandedGroups[group.key]);
-                            const latest = group.latest;
+    const recipientWalletAddress = shareWalletAddress.trim();
+    if (!recipientWalletAddress) {
+      setShareError("Vui long nhap dia chi vi nguoi nhan.");
+      return;
+    }
 
-                            return (
-                                <div
-                                    key={group.key}
-                                    className="group notary-card rounded-2xl p-6 transition-all duration-300 animate-fade-in"
-                                    style={{ animationDelay: `${index * 0.05}s` }}
-                                >
-                                    <button
-                                        onClick={() => toggleGroup(group.key)}
-                                        className="w-full text-left"
-                                    >
-                                        <div className="flex items-start justify-between gap-4 mb-4">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="w-12 h-12 rounded-xl bg-notary-cyan/10 flex items-center justify-center text-xs font-semibold text-notary-cyan">
-                                                    {getFileIcon(latest.fileType)}
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-heading font-semibold text-white truncate max-w-[320px]">
-                                                        {latest.title}
-                                                    </h3>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium border ${getTypeColor(latest.documentType)}`}>
-                                                            {latest.documentType}
-                                                        </span>
-                                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-notary-dark text-notary-cyan border border-notary-cyan/20">
-                                                            <GitBranch className="w-3 h-3 mr-1" />
-                                                            {group.versions.length} version(s)
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
+    setIsSharing(true);
+    setShareError(null);
+    setShareSuccess(null);
 
-                                            <div className="flex items-center gap-2">
-                                                <div className="relative">
-                                                    <div className="w-8 h-8 rounded-full bg-notary-success/20 flex items-center justify-center">
-                                                        <Award className="w-4 h-4 text-notary-success" />
-                                                    </div>
-                                                    <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-notary-success animate-pulse"></div>
-                                                </div>
-                                                {expanded ? (
-                                                    <ChevronUp className="w-5 h-5 text-slate-400" />
-                                                ) : (
-                                                    <ChevronDown className="w-5 h-5 text-slate-400" />
-                                                )}
-                                            </div>
-                                        </div>
+    try {
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        }/documents/${shareTarget.id}/share-by-wallet`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "x-wallet-address": wallet.address,
+          },
+          body: JSON.stringify({
+            recipientWalletAddress,
+            message: shareMessage.trim() || null,
+          }),
+        },
+      );
 
-                                        <div className="mb-4 p-3 rounded-lg bg-notary-dark">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-slate-500 text-xs flex items-center">
-                                                    <Hash className="w-3 h-3 mr-1" />
-                                                    Latest Version Hash
-                                                </span>
-                                                <span className="font-mono text-xs text-notary-cyan">
-                                                    {truncateHash(latest.fileHash)}
-                                                </span>
-                                            </div>
-                                        </div>
+      const data = await response
+        .json()
+        .catch(() => ({} as { message?: string }));
+      if (!response.ok) {
+        throw new Error(data.message || "Khong chia se duoc tai lieu");
+      }
 
-                                        <div className="flex items-center justify-between text-sm">
-                                            <div className="flex items-center text-slate-400">
-                                                <Calendar className="w-4 h-4 mr-1" />
-                                                {formatDate(latest.mintDate)}
-                                            </div>
-                                            <div className="font-mono text-xs text-slate-500">
-                                                Latest #{latest.tokenId}
-                                            </div>
-                                        </div>
-                                    </button>
+      setShareSuccess(data.message || "Da chia se thanh cong.");
+      setShareWalletAddress("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Khong chia se duoc tai lieu";
+      setShareError(message);
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
-                                    {expanded ? (
-                                        <div className="mt-5 pt-5 border-t border-notary-slate-dark/30 space-y-3">
-                                            {group.versions.map((version, idx) => (
-                                                <div key={version.id} className="rounded-xl bg-notary-dark-secondary/50 border border-notary-slate-dark/40 p-4">
-                                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                                        <div>
-                                                            <p className="text-white font-medium">
-                                                                Version V{group.versions.length - idx} • Token #{version.tokenId}
-                                                            </p>
-                                                            <p className="text-slate-400 text-sm">
-                                                                {version.fileName} • {formatDate(version.mintDate)}
-                                                            </p>
-                                                            <p className="font-mono text-xs text-notary-cyan mt-1 break-all">
-                                                                {version.fileHash}
-                                                            </p>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <button
-                                                                onClick={() => setSelectedDocument(version)}
-                                                                className="flex items-center justify-center space-x-1 py-2 px-3 rounded-lg bg-notary-cyan/10 text-notary-cyan text-sm font-medium hover:bg-notary-cyan/20 transition-colors"
-                                                            >
-                                                                <Eye className="w-4 h-4" />
-                                                                <span>View</span>
-                                                            </button>
-                                                            <button
-                                                                onClick={() => navigator.clipboard.writeText(version.transactionHash)}
-                                                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
-                                                                title="Copy Transaction Hash"
-                                                            >
-                                                                <Share2 className="w-4 h-4" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    void handleDownloadFile(version);
-                                                                }}
-                                                                disabled={downloadingId === version.id}
-                                                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                                                title="Download Original File"
-                                                            >
-                                                                {downloadingId === version.id ? (
-                                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                                ) : (
-                                                                    <Download className="w-4 h-4" />
-                                                                )}
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : null}
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    <div className="text-center py-20">
-                        <div className="w-24 h-24 rounded-full bg-notary-dark-secondary flex items-center justify-center mx-auto mb-6">
-                            <FileText className="w-12 h-12 text-slate-600" />
-                        </div>
-                        <h3 className="font-heading text-xl font-semibold text-white mb-2">
-                            No Documents Found
-                        </h3>
-                        <p className="text-slate-500 mb-6">
-                            {searchQuery || filterType !== 'All'
-                                ? 'Try adjusting your search or filter criteria'
-                                : 'Start by notarizing your first document'}
-                        </p>
-                    </div>
-                )}
-            </div>
+  return (
+    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="font-heading text-3xl font-bold text-white mb-2">
+            My Documents
+          </h1>
+          <p className="text-slate-400">
+            Click a document to see all its versions.
+          </p>
         </div>
-    );
+
+        {/* Error Alert */}
+        {downloadError && (
+          <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 animate-slide-up">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-red-400 font-medium">Download Error</p>
+              <p className="text-red-300 text-sm mt-1">{downloadError}</p>
+            </div>
+            <button
+              onClick={() => setDownloadError(null)}
+              className="text-red-400 hover:text-red-300 transition-colors ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        <div className="mb-8">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search documents..."
+                className="w-full pl-12 pr-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+              />
+            </div>
+
+            <CustomSelect
+              value={filterType}
+              onChange={(value) => setFilterType(value as DocumentType | "All")}
+              options={[
+                { label: "All Types", value: "All" },
+                ...documentTypes.map((type) => ({ label: type, value: type })),
+              ]}
+              icon={<Filter className="w-5 h-5 text-slate-400" />}
+              className="w-full sm:w-48"
+            />
+
+            <CustomSelect
+              value={sortBy}
+              onChange={(value) => setSortBy(value as "recent" | "oldest")}
+              options={[
+                { label: "Most Recent", value: "recent" },
+                { label: "Oldest First", value: "oldest" },
+              ]}
+              icon={<Calendar className="w-5 h-5 text-slate-400" />}
+              className="w-full sm:w-40"
+            />
+          </div>
+        </div>
+
+        <p className="text-slate-500 text-sm mb-6">
+          Showing {filteredGroups.length} document groups ({documents.length}{" "}
+          total versions)
+        </p>
+
+        {filteredGroups.length > 0 ? (
+          <div className="space-y-5">
+            {filteredGroups.map((group, index) => {
+              const expanded = Boolean(expandedGroups[group.key]);
+              const latest = group.latest;
+
+              return (
+                <div
+                  key={group.key}
+                  className="group notary-card rounded-2xl p-6 transition-all duration-300 animate-fade-in"
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                >
+                  <button
+                    onClick={() => toggleGroup(group.key)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-xl bg-notary-cyan/10 flex items-center justify-center text-xs font-semibold text-notary-cyan">
+                          {getFileIcon(latest.fileType)}
+                        </div>
+                        <div>
+                          <h3 className="font-heading font-semibold text-white truncate max-w-[320px]">
+                            {latest.title}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-xs font-medium border ${getTypeColor(
+                                latest.documentType,
+                              )}`}
+                            >
+                              {latest.documentType}
+                            </span>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-notary-dark text-notary-cyan border border-notary-cyan/20">
+                              <GitBranch className="w-3 h-3 mr-1" />
+                              {group.versions.length} version(s)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="relative">
+                          <div className="w-8 h-8 rounded-full bg-notary-success/20 flex items-center justify-center">
+                            <Award className="w-4 h-4 text-notary-success" />
+                          </div>
+                          <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-notary-success animate-pulse"></div>
+                        </div>
+                        {expanded ? (
+                          <ChevronUp className="w-5 h-5 text-slate-400" />
+                        ) : (
+                          <ChevronDown className="w-5 h-5 text-slate-400" />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mb-4 p-3 rounded-lg bg-notary-dark">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 text-xs flex items-center">
+                          <Hash className="w-3 h-3 mr-1" />
+                          Latest Version Hash
+                        </span>
+                        <span className="font-mono text-xs text-notary-cyan">
+                          {truncateHash(latest.fileHash)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center text-slate-400">
+                        <Calendar className="w-4 h-4 mr-1" />
+                        {formatDate(latest.mintDate)}
+                      </div>
+                      <div className="font-mono text-xs text-slate-500">
+                        Latest #{latest.tokenId}
+                      </div>
+                    </div>
+                  </button>
+
+                  {expanded ? (
+                    <div className="mt-5 pt-5 border-t border-notary-slate-dark/30 space-y-3">
+                      {group.versions.map((version, idx) => (
+                        <div
+                          key={version.id}
+                          className="rounded-xl bg-notary-dark-secondary/50 border border-notary-slate-dark/40 p-4"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div>
+                              <p className="text-white font-medium">
+                                Version V{group.versions.length - idx} • Token #
+                                {version.tokenId}
+                              </p>
+                              <p className="text-slate-400 text-sm">
+                                {version.fileName} •{" "}
+                                {formatDate(version.mintDate)}
+                              </p>
+                              <p className="font-mono text-xs text-notary-cyan mt-1 break-all">
+                                {version.fileHash}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setSelectedDocument(version)}
+                                className="flex items-center justify-center space-x-1 py-2 px-3 rounded-lg bg-notary-cyan/10 text-notary-cyan text-sm font-medium hover:bg-notary-cyan/20 transition-colors"
+                              >
+                                <Eye className="w-4 h-4" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                onClick={() =>
+                                  navigator.clipboard.writeText(
+                                    version.transactionHash,
+                                  )
+                                }
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
+                                title="Copy Transaction Hash"
+                              >
+                                <Share2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => openShareModal(version)}
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
+                                title="Share By Wallet"
+                              >
+                                <Share2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  void handleDownloadFile(version);
+                                }}
+                                disabled={downloadingId === version.id}
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                title="Download Original File"
+                              >
+                                {downloadingId === version.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Download className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-20">
+            <div className="w-24 h-24 rounded-full bg-notary-dark-secondary flex items-center justify-center mx-auto mb-6">
+              <FileText className="w-12 h-12 text-slate-600" />
+            </div>
+            <h3 className="font-heading text-xl font-semibold text-white mb-2">
+              No Documents Found
+            </h3>
+            <p className="text-slate-500 mb-6">
+              {searchQuery || filterType !== "All"
+                ? "Try adjusting your search or filter criteria"
+                : "Start by notarizing your first document"}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {shareTarget ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={closeShareModal}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-notary-slate-dark bg-notary-dark-secondary p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-heading text-xl font-semibold text-white">
+                  Share Document By Wallet
+                </h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  {shareTarget.title}
+                </p>
+              </div>
+              <button
+                onClick={closeShareModal}
+                className="text-slate-500 hover:text-white transition-colors"
+                disabled={isSharing}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-slate-300 text-sm mb-2">
+                  Recipient Wallet Address
+                </label>
+                <input
+                  type="text"
+                  value={shareWalletAddress}
+                  onChange={(event) =>
+                    setShareWalletAddress(event.target.value)
+                  }
+                  placeholder="0x..."
+                  className="w-full px-4 py-3 rounded-xl bg-notary-dark border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all font-mono text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 text-sm mb-2">
+                  Message (optional)
+                </label>
+                <textarea
+                  value={shareMessage}
+                  onChange={(event) => setShareMessage(event.target.value)}
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl bg-notary-dark border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all text-sm resize-none"
+                />
+              </div>
+
+              {shareError ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-300 text-sm">
+                  {shareError}
+                </div>
+              ) : null}
+
+              {shareSuccess ? (
+                <div className="rounded-xl border border-notary-success/30 bg-notary-success/10 px-3 py-2 text-notary-success text-sm">
+                  {shareSuccess}
+                </div>
+              ) : null}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={closeShareModal}
+                  disabled={isSharing}
+                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-300 hover:text-white hover:border-slate-500 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    void handleShareByWallet();
+                  }}
+                  disabled={isSharing}
+                  className="px-4 py-2 rounded-xl bg-notary-cyan text-notary-dark font-semibold hover:bg-notary-cyan-dim transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {isSharing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : null}
+                  Share Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 };
 
 export default Documents;

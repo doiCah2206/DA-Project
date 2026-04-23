@@ -4,13 +4,18 @@ import {
     Search, Upload, FileText, CheckCircle, XCircle, Loader2,
     Calendar, Hash, Award, ExternalLink, User
 } from 'lucide-react';
+import { useAppStore } from '../store';
 import type { NotarizedDocument } from '../types';
 
 const Verify = () => {
+    const { token, wallet } = useAppStore();
     const [file, setFile] = useState<File | null>(null);
     const [fileHash, setFileHash] = useState('');
     const [manualHash, setManualHash] = useState('');
     const [isVerifying, setIsVerifying] = useState(false);
+    const [isRequestingAccess, setIsRequestingAccess] = useState(false);
+    const [requestMessage, setRequestMessage] = useState('');
+    const [requestError, setRequestError] = useState('');
     const [result, setResult] = useState<{ found: boolean; document?: NotarizedDocument } | null>(null);
 
     // Compute SHA-256 hash
@@ -120,6 +125,44 @@ const Verify = () => {
     const handleManualVerify = () => {
         if (manualHash) {
             handleVerify(manualHash);
+        }
+    };
+
+    const handleRequestAccess = async () => {
+        if (!result?.found || !result.document) return;
+        if (!token || !wallet.isConnected || !wallet.address) {
+            setRequestError('Vui long ket noi vi truoc khi gui yeu cau truy cap.');
+            return;
+        }
+
+        setIsRequestingAccess(true);
+        setRequestError('');
+        setRequestMessage('');
+
+        try {
+            const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/${result.document.id}/access-requests`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                    'x-wallet-address': wallet.address,
+                },
+                body: JSON.stringify({
+                    message: 'Please grant access to this notarized document.',
+                }),
+            });
+
+            const data = await response.json().catch(() => ({} as { message?: string }));
+            if (!response.ok) {
+                throw new Error(data.message || 'Khong gui duoc yeu cau');
+            }
+
+            setRequestMessage(data.message || 'Da gui yeu cau truy cap thanh cong.');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Khong gui duoc yeu cau';
+            setRequestError(message);
+        } finally {
+            setIsRequestingAccess(false);
         }
     };
 
@@ -373,6 +416,31 @@ const Verify = () => {
                                             View on Explorer
                                             <ExternalLink className="w-3 h-3 ml-1" />
                                         </a>
+                                    </div>
+
+                                    <div className="p-4 rounded-xl bg-notary-dark-secondary/50 border border-notary-slate-dark/30">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                            <div>
+                                                <span className="text-slate-500 text-xs block mb-1">Access Request</span>
+                                                <p className="text-slate-300 text-sm">Request access from the owner to unlock the original file.</p>
+                                            </div>
+                                            <button
+                                                onClick={handleRequestAccess}
+                                                disabled={isRequestingAccess || !wallet.isConnected}
+                                                className="px-4 py-2 rounded-lg bg-notary-cyan/10 border border-notary-cyan text-notary-cyan font-semibold hover:bg-notary-cyan/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                            >
+                                                {isRequestingAccess ? 'Sending...' : 'Request Access'}
+                                            </button>
+                                        </div>
+                                        {!wallet.isConnected ? (
+                                            <p className="text-xs text-slate-500 mt-2">Connect a wallet to send an access request.</p>
+                                        ) : null}
+                                        {requestMessage ? (
+                                            <p className="text-xs text-notary-success mt-2">{requestMessage}</p>
+                                        ) : null}
+                                        {requestError ? (
+                                            <p className="text-xs text-red-400 mt-2">{requestError}</p>
+                                        ) : null}
                                     </div>
                                 </div>
                             </div>
