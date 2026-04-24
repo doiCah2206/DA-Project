@@ -12,6 +12,7 @@ import {
   resolveAccessRequest,
   getSharedDocuments,
   shareDocumentByWallet,
+  revokeSharedDocument,
 } from "../controllers/documentController";
 import { authMiddleware } from "../middleware/auth";
 
@@ -31,6 +32,7 @@ router.patch(
   resolveAccessRequest,
 );
 router.post("/:id/share-by-wallet", authMiddleware, shareDocumentByWallet);
+router.patch("/:id/revoke/:requestId", authMiddleware, revokeSharedDocument);
 router.get("/verify/:hash", verifyDocument);
 router.get("/records", getRecordsByWallet); // public
 router.get("/access-log/:recordId", authMiddleware, getAccessLog); // cần auth

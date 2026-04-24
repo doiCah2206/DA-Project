@@ -238,7 +238,7 @@ export const createAccessRequest = async (req: Request, res: Response) => {
     const existingRequest = await pool.query(
       `SELECT id, status FROM document_access_requests
              WHERE document_id = $1
-               AND requester_wallet_address = $3
+               AND requester_wallet_address = $2
              ORDER BY created_at DESC
              LIMIT 1`,
       [id, activeWalletHeader],
@@ -671,6 +671,82 @@ export const shareDocumentByWallet = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Lỗi shareDocumentByWallet:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
+export const revokeSharedDocument = async (req: Request, res: Response) => {
+  try {
+    const userId = Number((req as any).user.userId);
+    const jwtWalletAddress = String(
+      (req as any).user.wallet_address ?? "",
+    ).toLowerCase();
+    const activeWalletHeader = String(
+      req.headers["x-wallet-address"] ?? "",
+    ).toLowerCase();
+    const { id, requestId } = req.params;
+
+    if (!activeWalletHeader) {
+      return res.status(401).json({ message: "Thiếu x-wallet-address" });
+    }
+
+    if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
+      return res.status(401).json({
+        message: "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
+    }
+
+    const docResult = await pool.query(
+      "SELECT id, user_id, owner_address FROM documents WHERE id = $1",
+      [id],
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy tài liệu." });
+    }
+
+    const document = docResult.rows[0];
+    const ownerAddress = String(document.owner_address ?? "").toLowerCase();
+
+    if (
+      Number(document.user_id) !== userId ||
+      (ownerAddress && ownerAddress !== activeWalletHeader)
+    ) {
+      return res.status(403).json({ message: "Bạn không có quyền thu hồi tài liệu này." });
+    }
+
+    const requestResult = await pool.query(
+      `SELECT id, status FROM document_access_requests
+       WHERE id = $1 AND document_id = $2`,
+      [requestId, id],
+    );
+
+    if (requestResult.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy bản ghi chia sẻ." });
+    }
+
+    if (requestResult.rows[0].status !== "approved") {
+      return res.status(409).json({ message: "Tài liệu này chưa được chia sẻ hoặc đã bị thu hồi." });
+    }
+
+    const updateResult = await pool.query(
+      `UPDATE document_access_requests
+       SET status = 'revoked',
+           resolved_by_user_id = $1,
+           resolved_at = NOW(),
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [userId, requestId],
+    );
+
+    return res.status(200).json({
+      message: "Đã thu hồi quyền truy cập tài liệu.",
+      request: updateResult.rows[0],
+    });
+  } catch (error) {
+    console.error("Lỗi revokeSharedDocument:", error);
     const message = error instanceof Error ? error.message : "Lỗi server";
     return res.status(500).json({ message });
   }
