@@ -238,7 +238,7 @@ export const createAccessRequest = async (req: Request, res: Response) => {
     const existingRequest = await pool.query(
       `SELECT id, status FROM document_access_requests
              WHERE document_id = $1
-               AND requester_wallet_address = $3
+               AND requester_wallet_address = $2
              ORDER BY created_at DESC
              LIMIT 1`,
       [id, activeWalletHeader],
