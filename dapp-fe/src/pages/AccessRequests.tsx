@@ -4,6 +4,7 @@ import {
   Loader2,
   MailOpen,
   ShieldCheck,
+  ShieldOff,
   XCircle,
   Wallet,
 } from "lucide-react";
@@ -15,7 +16,7 @@ type AccessRequest = {
   requester_wallet_address: string;
   requester_name: string | null;
   message: string | null;
-  status: "pending" | "approved" | "rejected" | string;
+  status: "pending" | "approved" | "rejected" | "revoked" | string;
   title: string;
   file_name: string;
   document_type: string;
@@ -78,6 +79,50 @@ const AccessRequests = () => {
 
     void loadRequests();
   }, [token]);
+
+  const handleRevoke = async (documentId: string, requestId: string) => {
+    if (!token) return;
+
+    setActiveRequestId(requestId);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        }/documents/${documentId}/revoke/${requestId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "x-wallet-address": wallet.address ?? "",
+          },
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({} as { message?: string }));
+      if (!response.ok) {
+        throw new Error(data.message || "Không thu hồi được quyền truy cập");
+      }
+
+      setRequests((prev) =>
+        prev.map((request) =>
+          request.id === requestId ? { ...request, status: "revoked" } : request,
+        ),
+      );
+    } catch (revokeError) {
+      const message =
+        revokeError instanceof Error
+          ? revokeError.message
+          : "Không thu hồi được quyền truy cập";
+      setError(message);
+    } finally {
+      setActiveRequestId(null);
+    }
+  };
 
   const handleResolve = async (
     requestId: string,
@@ -200,6 +245,8 @@ const AccessRequests = () => {
                             ? "bg-notary-success/15 text-notary-success border-notary-success/30"
                             : request.status === "rejected"
                             ? "bg-red-500/10 text-red-400 border-red-500/30"
+                            : request.status === "revoked"
+                            ? "bg-slate-500/10 text-slate-400 border-slate-500/30"
                             : "bg-notary-gold/10 text-notary-gold border-notary-gold/30"
                         }`}
                       >
@@ -247,6 +294,22 @@ const AccessRequests = () => {
                           Reject
                         </button>
                       </>
+                    ) : null}
+                    {request.status === "approved" ? (
+                      <button
+                        onClick={() => {
+                          void handleRevoke(request.document_id, request.id);
+                        }}
+                        disabled={activeRequestId === request.id}
+                        className="px-4 py-2 rounded-xl bg-slate-500/10 text-slate-400 border border-slate-500/30 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all inline-flex items-center gap-2"
+                      >
+                        {activeRequestId === request.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ShieldOff className="w-4 h-4" />
+                        )}
+                        Revoke
+                      </button>
                     ) : null}
                   </div>
                 </div>
