@@ -22,6 +22,9 @@ export interface NotarizedDocument {
     transactionHash: string;
     ipfsUri: string;
     ipfsCid?: string;
+    price?: number;
+    isListed?: boolean;
+    currency?: string;
 }
 
 export interface WalletState {

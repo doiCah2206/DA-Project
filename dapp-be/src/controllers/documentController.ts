@@ -493,52 +493,6 @@ export const saveIpfsCid = async (req: Request, res: Response) => {
   }
 };
 
-// GET /api/documents/records?wallet=0x... — lấy records theo địa chỉ ví
-export const getRecordsByWallet = async (req: Request, res: Response) => {
-  try {
-    const { wallet } = req.query;
-    if (!wallet)
-      return res.status(400).json({ message: "Thiếu wallet address" });
-
-    const result = await pool.query(
-      "SELECT * FROM documents WHERE owner_address = $1 ORDER BY mint_date DESC",
-      [String(wallet).toLowerCase()],
-    );
-    res.json({ documents: result.rows });
-  } catch (error) {
-    console.error("Lỗi getRecordsByWallet:", error);
-    res.status(500).json({ message: "Lỗi server" });
-  }
-};
-
-// GET /api/documents/access-log/:recordId — lấy access log của 1 document
-export const getAccessLog = async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user.userId;
-    const { recordId } = req.params;
-
-    // Chỉ cho phép xem log của document thuộc về user đó
-    const docCheck = await pool.query(
-      "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
-      [recordId, userId],
-    );
-    if (docCheck.rows.length === 0) {
-      return res.status(403).json({ message: "Không có quyền xem log này" });
-    }
-
-    const result = await pool.query(
-      `SELECT * FROM access_log 
-             WHERE document_id = $1 
-             ORDER BY accessed_at DESC`,
-      [recordId],
-    );
-    res.json({ logs: result.rows });
-  } catch (error) {
-    console.error("Lỗi getAccessLog:", error);
-    res.status(500).json({ message: "Lỗi server" });
-  }
-};
-
 // POST /api/documents/:id/share-by-wallet — chủ tài liệu chia sẻ trực tiếp theo địa chỉ ví (auto approved)
 export const shareDocumentByWallet = async (req: Request, res: Response) => {
   try {
@@ -673,5 +627,69 @@ export const shareDocumentByWallet = async (req: Request, res: Response) => {
     console.error("Lỗi shareDocumentByWallet:", error);
     const message = error instanceof Error ? error.message : "Lỗi server";
     return res.status(500).json({ message });
+  }
+};
+
+// POST /api/documents/:id/list-for-sale — chủ tài liệu đăng bán
+export const listForSale = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { id } = req.params;
+    const price = Number(req.body?.price);
+    const currency = String(req.body?.currency ?? "TEST");
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ message: "Giá không hợp lệ" });
+    }
+
+    const existing = await pool.query(
+      `SELECT is_listed FROM documents WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    if (existing.rows[0].is_listed) {
+      return res.status(409).json({ message: "Tài liệu này đã được đăng bán rồi." });
+    }
+
+    const result = await pool.query(
+      `UPDATE documents
+       SET is_listed = true, price = $1, currency = $2
+       WHERE id = $3 AND user_id = $4
+       RETURNING *`,
+      [price, currency, id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    return res.json({ message: "Đã đăng bán tài liệu.", document: result.rows[0] });
+  } catch (error) {
+    console.error("Lỗi listForSale:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
+// GET /api/documents/marketplace — danh sách tài liệu đang bán (public)
+export const getMarketplace = async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, token_id, file_name, file_type, title, document_type,
+              description, owner_name, owner_address, tags, transaction_hash,
+              ipfs_uri, ipfs_cid, mint_date, price, currency
+       FROM documents
+       WHERE is_listed = true
+       ORDER BY mint_date DESC`
+    );
+
+    return res.json({ documents: result.rows });
+  } catch (error) {
+    console.error("Lỗi getMarketplace:", error);
+    return res.status(500).json({ message: "Lỗi server" });
   }
 };

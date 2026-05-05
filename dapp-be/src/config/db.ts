@@ -7,52 +7,52 @@ dotenv.config();
 const databaseUrl = process.env.DATABASE_URL?.trim();
 
 if (!databaseUrl) {
-  const requiredEnvVars = [
-    "DB_HOST",
-    "DB_PORT",
-    "DB_NAME",
-    "DB_USER",
-    "DB_PASSWORD",
-  ] as const;
-  const missingEnvVars = requiredEnvVars.filter((key) => !process.env[key]);
-  if (missingEnvVars.length > 0) {
-    console.warn(`Thiếu biến môi trường DB: ${missingEnvVars.join(", ")}`);
-  }
+    const requiredEnvVars = [
+        "DB_HOST",
+        "DB_PORT",
+        "DB_NAME",
+        "DB_USER",
+        "DB_PASSWORD",
+    ] as const;
+    const missingEnvVars = requiredEnvVars.filter((key) => !process.env[key]);
+    if (missingEnvVars.length > 0) {
+        console.warn(`Thiếu biến môi trường DB: ${missingEnvVars.join(", ")}`);
+    }
 }
 
 const dbPort = Number(process.env.DB_PORT);
 if (!databaseUrl && Number.isNaN(dbPort)) {
-  console.warn("DB_PORT không hợp lệ, sẽ dùng mặc định 5432");
+    console.warn("DB_PORT không hợp lệ, sẽ dùng mặc định 5432");
 }
 
 const shouldUseSsl =
-  process.env.DB_SSL === "true" ||
-  Boolean(databaseUrl?.includes("sslmode=require"));
+    process.env.DB_SSL === "true" ||
+    Boolean(databaseUrl?.includes("sslmode=require"));
 
 // Tạo connection pool
 const pool = new Pool(
-  databaseUrl
-    ? {
-        connectionString: databaseUrl,
-        ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
-      }
-    : {
-        host: process.env.DB_HOST || "localhost",
-        port: Number.isNaN(dbPort) ? 5432 : dbPort,
-        database: process.env.DB_NAME,
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
-      },
+    databaseUrl
+        ? {
+              connectionString: databaseUrl,
+              ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+          }
+        : {
+              host: process.env.DB_HOST || "localhost",
+              port: Number.isNaN(dbPort) ? 5432 : dbPort,
+              database: process.env.DB_NAME,
+              user: process.env.DB_USER,
+              password: process.env.DB_PASSWORD,
+              ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+          },
 );
 
 pool.on("error", (error) => {
-  console.error("Lỗi từ pool database:", error.message);
+    console.error("Lỗi từ pool database:", error.message);
 });
 
 const initializeDatabase = async () => {
-  try {
-    await pool.query(`
+    try {
+        await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 wallet_address VARCHAR(255) UNIQUE NOT NULL,
@@ -81,13 +81,20 @@ const initializeDatabase = async () => {
                 encrypted_key TEXT,                        -- ← THÊM: AES key (nếu dùng encryption)
                 mint_date TIMESTAMP DEFAULT NOW(),
                 created_at TIMESTAMP DEFAULT NOW(),
-                token_id VARCHAR(255)
+                token_id VARCHAR(255),
+                price NUMERIC,
+                is_listed BOOLEAN DEFAULT false,
+                currency VARCHAR(20) DEFAULT 'TEST'
             );
 
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS ipfs_cid VARCHAR(255);
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS encrypted_key TEXT;
 
             ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_file_hash_key;
+
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS price NUMERIC;
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_listed BOOLEAN DEFAULT false;
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS currency VARCHAR(20) DEFAULT 'TEST';
 
             CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_hash_owner
                 ON documents(file_hash, owner_address);
@@ -130,24 +137,24 @@ const initializeDatabase = async () => {
             CREATE INDEX IF NOT EXISTS idx_access_requests_status ON document_access_requests(status);
         `);
 
-    console.log(
-      "Kết nối database thành công và đã kiểm tra bảng users/documents!",
-    );
-  } catch (error: any) {
-    console.error("Lỗi khởi tạo database:", {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-    });
-  }
+        console.log(
+            "Kết nối database thành công và đã kiểm tra bảng users/documents!",
+        );
+    } catch (error: any) {
+        console.error("Lỗi khởi tạo database:", {
+            message: error.message,
+            code: error.code,
+            detail: error.detail,
+        });
+    }
 };
 
 void initializeDatabase();
 
 console.log(
-  databaseUrl
-    ? "Database mode: DATABASE_URL (Neon/managed Postgres)"
-    : "Database mode: DB_HOST/DB_PORT (direct connection)",
+    databaseUrl
+        ? "Database mode: DATABASE_URL (Neon/managed Postgres)"
+        : "Database mode: DB_HOST/DB_PORT (direct connection)",
 );
 
 export default pool;

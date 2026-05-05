@@ -4,14 +4,14 @@ import {
   getMyDocuments,
   verifyDocument,
   saveIpfsCid,
-  getRecordsByWallet,
-  getAccessLog,
   getDecryptionKey,
   createAccessRequest,
   getAccessRequestsForOwner,
   resolveAccessRequest,
   getSharedDocuments,
   shareDocumentByWallet,
+  listForSale,
+  getMarketplace,
 } from "../controllers/documentController";
 import { authMiddleware } from "../middleware/auth";
 
@@ -31,8 +31,8 @@ router.patch(
   resolveAccessRequest,
 );
 router.post("/:id/share-by-wallet", authMiddleware, shareDocumentByWallet);
+router.post("/:id/list-for-sale", authMiddleware, listForSale);
+router.get("/marketplace", getMarketplace);
 router.get("/verify/:hash", verifyDocument);
-router.get("/records", getRecordsByWallet); // public
-router.get("/access-log/:recordId", authMiddleware, getAccessLog); // cần auth
 
 export default router;
