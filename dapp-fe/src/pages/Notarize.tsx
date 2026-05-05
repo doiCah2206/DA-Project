@@ -330,7 +330,7 @@ const Notarize = () => {
     const renderStep1 = () => (
         <div className="space-y-6 animate-fade-in">
             <div className="text-center mb-8">
-                <h2 className="font-heading text-2xl font-bold text-white mb-2">
+                <h2 className="font-heading text-2xl font-bold text-gray-900 mb-2">
                     Choose Type
                 </h2>
                 {/* <p className="text-slate-400">
@@ -351,7 +351,7 @@ const Notarize = () => {
                 >
                     <div className="flex items-center mb-3">
                         <FileText className="w-5 h-5 mr-2 text-notary-cyan" />
-                        <h3 className="font-heading text-white font-semibold">New Document</h3>
+                        <h3 className="font-heading text-gray-900 font-semibold">New Document</h3>
                     </div>
                     <p className="text-slate-400 text-sm">
                         Tao mot document hoan toan moi, version se bat dau tu V1.
@@ -367,7 +367,7 @@ const Notarize = () => {
                 >
                     <div className="flex items-center mb-3">
                         <GitBranch className="w-5 h-5 mr-2 text-notary-cyan" />
-                        <h3 className="font-heading text-white font-semibold">Add New Version</h3>
+                        <h3 className="font-heading text-gray-900 font-semibold">Add New Version</h3>
                     </div>
                     <p className="text-slate-400 text-sm">
                         Chon document cu va tao them phien ban moi cho no.
@@ -413,7 +413,7 @@ const Notarize = () => {
     const renderStep2 = () => (
         <div className="space-y-8 animate-fade-in">
             <div className="text-center mb-8">
-                <h2 className="font-heading text-2xl font-bold text-white mb-2">
+                <h2 className="font-heading text-2xl font-bold text-gray-900 mb-2">
                     Upload File
                 </h2>
                 <p className="text-slate-400">
@@ -446,7 +446,7 @@ const Notarize = () => {
                                 {getFileIcon(formData.file.type)}
                             </div>
                             <div>
-                                <h3 className="font-heading font-semibold text-white text-lg">
+                                <h3 className="font-heading font-semibold text-gray-900 text-lg">
                                     {formData.file.name}
                                 </h3>
                                 <p className="text-slate-400 text-sm">
@@ -491,7 +491,7 @@ const Notarize = () => {
     const renderStep3 = () => (
         <div className="space-y-6 animate-fade-in">
             <div className="text-center mb-8">
-                <h2 className="font-heading text-2xl font-bold text-white mb-2">
+                <h2 className="font-heading text-2xl font-bold text-gray-900 mb-2">
                     Fill Metadata
                 </h2>
                 <p className="text-slate-400">
@@ -584,7 +584,7 @@ const Notarize = () => {
                         <Sparkles className="w-12 h-12 text-notary-success" />
                     </div>
 
-                    <h2 className="font-heading text-3xl font-bold text-white mb-4">
+                    <h2 className="font-heading text-3xl font-bold text-gray-900 mb-4">
                         Successfully Notarized!
                     </h2>
 
@@ -654,7 +654,7 @@ const Notarize = () => {
                         <Loader2 className="w-12 h-12 text-notary-cyan animate-spin" />
                     </div>
 
-                    <h2 className="font-heading text-2xl font-bold text-white mb-4">
+                    <h2 className="font-heading text-2xl font-bold text-gray-900 mb-4">
                         Minting Your NFT
                     </h2>
 
@@ -669,7 +669,7 @@ const Notarize = () => {
         return (
             <div className="space-y-6 animate-fade-in">
                 <div className="text-center mb-8">
-                    <h2 className="font-heading text-2xl font-bold text-white mb-2">
+                    <h2 className="font-heading text-2xl font-bold text-gray-900 mb-2">
                         Review & Mint
                     </h2>
                     <p className="text-slate-400">
@@ -678,7 +678,7 @@ const Notarize = () => {
                 </div>
 
                 <div className="notary-card rounded-2xl p-6">
-                    <h3 className="font-heading text-lg font-semibold text-white mb-4 flex items-center">
+                    <h3 className="font-heading text-lg font-semibold text-gray-900 mb-4 flex items-center">
                         <FileText className="w-5 h-5 mr-2 text-notary-cyan" />
                         Notarization Summary
                     </h3>
@@ -750,7 +750,7 @@ const Notarize = () => {
     const showNavigation = !(step === 4 && (mintingStatus !== 'idle' || mintedDoc));
 
     return (
-        <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+        <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
             <div className="max-w-3xl mx-auto">
                 {renderStepIndicator()}
 

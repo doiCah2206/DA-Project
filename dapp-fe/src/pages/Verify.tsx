@@ -1,475 +1,550 @@
-import { useState, useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useState, useEffect } from 'react';
 import {
-    Search, Upload, FileText, CheckCircle, XCircle, Loader2,
-    Calendar, Hash, Award, ExternalLink, User
+    Search,
+    ShoppingBag,
+    Filter,
+    Star,
+    Download,
+    FileText,
+    Shield,
+    Tag,
+    ChevronDown,
+    X,
+    Loader2,
+    CheckCircle,
+    Wallet,
+    Hash,
+    Calendar,
+    User,
+    BookOpen,
+    Award,
 } from 'lucide-react';
 import { useAppStore } from '../store';
-import type { NotarizedDocument } from '../types';
+import type { NotarizedDocument, DocumentType } from '../types';
+
+type MarketListing = NotarizedDocument & {
+    price?: number;
+    currency?: string;
+    seller_rating?: number;
+    sales_count?: number;
+};
+
+type ApiRow = Record<string, unknown>;
+
+const mapListing = (row: ApiRow): MarketListing => ({
+    id: String(row.id),
+    tokenId: String(row.token_id ?? ''),
+    fileHash: String(row.file_hash ?? ''),
+    fileName: String(row.file_name ?? ''),
+    fileSize: Number(row.file_size ?? 0),
+    fileType: String(row.file_type ?? ''),
+    title: String(row.title ?? ''),
+    documentType: (row.document_type ?? 'Other') as DocumentType,
+    description: String(row.description ?? ''),
+    ownerName: String(row.owner_name ?? ''),
+    ownerAddress: String(row.owner_address ?? ''),
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    mintDate: new Date(String(row.mint_date ?? row.created_at ?? Date.now())),
+    transactionHash: String(row.transaction_hash ?? ''),
+    ipfsUri: String(row.ipfs_uri ?? ''),
+    ipfsCid: String(row.ipfs_cid ?? ''),
+    price: row.price == null ? undefined : Number(row.price),
+    currency: String(row.currency ?? 'TEST'),
+    seller_rating: row.seller_rating == null ? undefined : Number(row.seller_rating),
+    sales_count: Number(row.sales_count ?? 0),
+});
+
+const docTypeColors: Record<string, string> = {
+    Contract: 'bg-blue-500/15 text-blue-400 border-blue-500/25',
+    Certificate: 'bg-purple-500/15 text-purple-400 border-purple-500/25',
+    'ID Document': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+    'Legal Agreement': 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+    Other: 'bg-slate-500/15 text-slate-400 border-slate-500/25',
+};
+
+const docTypeIcons: Record<string, string> = {
+    Contract: '📋',
+    Certificate: '🎓',
+    'ID Document': '🪪',
+    'Legal Agreement': '⚖️',
+    Other: '📄',
+};
+
+const formatSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatDate = (d: Date | string) =>
+    new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 const Verify = () => {
     const { token, wallet } = useAppStore();
-    const [file, setFile] = useState<File | null>(null);
-    const [fileHash, setFileHash] = useState('');
-    const [manualHash, setManualHash] = useState('');
-    const [isVerifying, setIsVerifying] = useState(false);
-    const [isRequestingAccess, setIsRequestingAccess] = useState(false);
-    const [requestMessage, setRequestMessage] = useState('');
-    const [requestError, setRequestError] = useState('');
-    const [result, setResult] = useState<{ found: boolean; document?: NotarizedDocument } | null>(null);
+    const [listings, setListings] = useState<MarketListing[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [loadError, setLoadError] = useState('');
+    const [search, setSearch] = useState('');
+    const [filterType, setFilterType] = useState<DocumentType | 'All'>('All');
+    const [sortBy, setSortBy] = useState<'recent' | 'popular' | 'price_asc' | 'price_desc'>('recent');
+    const [showFilters, setShowFilters] = useState(false);
+    const [selectedListing, setSelectedListing] = useState<MarketListing | null>(null);
+    const [isPurchasing, setIsPurchasing] = useState(false);
+    const [purchaseSuccess, setPurchaseSuccess] = useState(false);
+    const [purchaseError, setPurchaseError] = useState('');
 
-    // Compute SHA-256 hash
-    const computeHash = useCallback(async (file: File): Promise<string> => {
-        const buffer = await file.arrayBuffer();
-        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return hashHex;
+    useEffect(() => {
+        const load = async () => {
+            setIsLoading(true);
+            setLoadError('');
+            try {
+                const res = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/marketplace`);
+                if (res.ok) {
+                    const data = await res.json() as { listings?: ApiRow[] };
+                    if (Array.isArray(data.listings)) {
+                        setListings((data.listings).map(mapListing));
+                    } else {
+                        setListings([]);
+                    }
+                } else {
+                    setLoadError('Marketplace is unavailable right now. Try again in a bit.');
+                }
+            } catch {
+                setLoadError('Marketplace is unavailable right now. Try again in a bit.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        void load();
     }, []);
 
-    const onDrop = useCallback((acceptedFiles: File[]) => {
-        const uploadedFile = acceptedFiles[0];
-        if (uploadedFile) {
-            setFile(uploadedFile);
-            void computeHash(uploadedFile).then((hash) => {
-                setFileHash(hash);
-            });
-        }
-    }, [computeHash]);
-
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        onDrop,
-        multiple: false,
-        maxFiles: 1,
-        onDragEnter: () => { },
-        onDragOver: () => { },
-        onDragLeave: () => { },
-    });
-
-    const dropzoneInputProps = getInputProps();
-    delete (dropzoneInputProps as { refKey?: string }).refKey;
-
-    const handleVerify = async (hash?: string) => {
-        const hashToVerify = hash || fileHash || manualHash;
-        if (!hashToVerify) return;
-
-        setIsVerifying(true);
-        setResult(null);
-
-        try {
-            // Bước 1 và 2 chạy SONG SONG — không chờ tx confirm
-            const [, res] = await Promise.all([
-                // Fire-and-forget: gửi tx lên chain nhưng không chờ
-                (async () => {
-                    if (window.ethereum) {
-                        try {
-                            const { BrowserProvider, Contract } = await import('ethers');
-                            const provider = new BrowserProvider(window.ethereum);
-                            const signer = await provider.getSigner();
-                            const { CONTRACT_ADDRESS, CONTRACT_ABI } = await import('../constants/contract');
-                            const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-                            const hashBytes32 = hashToVerify.startsWith('0x')
-                                ? hashToVerify
-                                : '0x' + hashToVerify;
-                            // Gửi tx — KHÔNG await tx.wait()
-                            const tx = await contract.verifyCertificate(hashBytes32);
-                            // Chờ confirm ngầm, ghi log sau — không block UI
-                            tx.wait().then(() => {
-                                console.log('AccessLogged event đã được ghi on-chain');
-                            }).catch(console.error);
-                        } catch {
-                            // Không bắt buộc
-                        }
-                    }
-                })(),
-                // Gọi BE ngay lập tức — không chờ blockchain
-                fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/verify/${hashToVerify}`)
-            ]);
-            const data = await res.json();
-
-            if (!data.found) {
-                setResult({ found: false });
-                return;
-            }
-
-            const d = data.document;
-            setResult({
-                found: true,
-                document: {
-                    id: String(d.id),
-                    tokenId: String(d.token_id ?? ''),
-                    fileHash: d.file_hash,
-                    fileName: d.file_name,
-                    fileSize: Number(d.file_size),
-                    fileType: d.file_type ?? '',
-                    title: d.title,
-                    documentType: (d.document_type ?? 'Other') as NotarizedDocument['documentType'],
-                    description: d.description ?? '',
-                    ownerName: d.owner_name ?? '',
-                    ownerAddress: d.owner_address ?? '',
-                    tags: Array.isArray(d.tags) ? d.tags : [],
-                    mintDate: new Date(d.mint_date ?? d.created_at),
-                    transactionHash: d.transaction_hash ?? '',
-                    ipfsUri: d.ipfs_uri ?? '',
-                    ipfsCid: d.ipfs_cid ?? '',
-                },
-            });
-        } catch (err) {
-            console.error('Lỗi verify:', err);
-            alert('Lỗi kết nối server khi verify.');
-        } finally {
-            setIsVerifying(false);
-        }
-    };
-
-    const handleManualVerify = () => {
-        if (manualHash) {
-            handleVerify(manualHash);
-        }
-    };
-
-    const handleRequestAccess = async () => {
-        if (!result?.found || !result.document) return;
+    const handlePurchase = async () => {
+        if (!selectedListing) return;
         if (!token || !wallet.isConnected || !wallet.address) {
-            setRequestError('Vui long ket noi vi truoc khi gui yeu cau truy cap.');
+            setPurchaseError('Connect your wallet to purchase documents.');
             return;
         }
-
-        setIsRequestingAccess(true);
-        setRequestError('');
-        setRequestMessage('');
-
+        if (selectedListing.price == null) {
+            setPurchaseError('This listing is not priced yet.');
+            return;
+        }
+        setIsPurchasing(true);
+        setPurchaseError('');
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/${result.document.id}/access-requests`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                    'x-wallet-address': wallet.address,
-                },
-                body: JSON.stringify({
-                    message: 'Please grant access to this notarized document.',
-                }),
-            });
-
-            const data = await response.json().catch(() => ({} as { message?: string }));
+            const response = await fetch(
+                `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/${selectedListing.id}/access-requests`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                        'x-wallet-address': wallet.address,
+                    },
+                    body: JSON.stringify({ message: 'Purchase request from marketplace.' }),
+                }
+            );
             if (!response.ok) {
-                throw new Error(data.message || 'Khong gui duoc yeu cau');
+                const d = await response.json().catch(() => ({})) as { message?: string };
+                throw new Error(d.message || 'Purchase failed');
             }
-
-            setRequestMessage(data.message || 'Da gui yeu cau truy cap thanh cong.');
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Khong gui duoc yeu cau';
-            setRequestError(message);
+            setPurchaseSuccess(true);
+        } catch (err) {
+            setPurchaseError(err instanceof Error ? err.message : 'Purchase failed');
         } finally {
-            setIsRequestingAccess(false);
+            setIsPurchasing(false);
         }
     };
 
-    const formatDate = (date: Date) => {
-        return new Date(date).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-        });
+    const openModal = (listing: MarketListing) => {
+        setSelectedListing(listing);
+        setPurchaseSuccess(false);
+        setPurchaseError('');
     };
 
-    const truncateHash = (hash: string, start = 10, end = 8) => {
-        return `${hash.slice(0, start)}...${hash.slice(-end)}`;
+    const closeModal = () => {
+        if (isPurchasing) return;
+        setSelectedListing(null);
+        setPurchaseSuccess(false);
+        setPurchaseError('');
     };
+
+    const filtered = listings
+        .filter((l) => {
+            if (!search) return true;
+            const q = search.toLowerCase();
+            return (
+                l.title.toLowerCase().includes(q) ||
+                l.ownerName.toLowerCase().includes(q) ||
+                l.description.toLowerCase().includes(q) ||
+                l.tags.some((t) => t.toLowerCase().includes(q))
+            );
+        })
+        .filter((l) => filterType === 'All' || l.documentType === filterType)
+        .sort((a, b) => {
+            if (sortBy === 'popular') return (b.sales_count ?? 0) - (a.sales_count ?? 0);
+            if (sortBy === 'price_asc') {
+                const priceA = a.price ?? Number.POSITIVE_INFINITY;
+                const priceB = b.price ?? Number.POSITIVE_INFINITY;
+                return priceA - priceB;
+            }
+            if (sortBy === 'price_desc') {
+                const priceA = a.price ?? Number.NEGATIVE_INFINITY;
+                const priceB = b.price ?? Number.NEGATIVE_INFINITY;
+                return priceB - priceA;
+            }
+            return new Date(b.mintDate).getTime() - new Date(a.mintDate).getTime();
+        });
+
+    const totalSold = listings.reduce((s, l) => s + (l.sales_count ?? 0), 0);
+    const docTypes: (DocumentType | 'All')[] = ['All', 'Contract', 'Certificate', 'ID Document', 'Legal Agreement', 'Other'];
 
     return (
-        <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-4xl mx-auto">
-                {/* Header */}
-                <div className="text-center mb-12">
-                    <h1 className="font-heading text-3xl sm:text-4xl font-bold text-white mb-4">
-                        Verify File Notarization
-                    </h1>
-                    <p className="text-slate-400 text-lg">
-                        Upload a file or paste a hash to verify its blockchain record
-                    </p>
-                </div>
-
-                {/* Upload Section */}
-                <div className="mb-8">
-                    <div
-                        {...getRootProps()}
-                        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${isDragActive
-                            ? 'border-notary-cyan bg-notary-cyan/5'
-                            : 'border-slate-700 hover:border-notary-cyan/50 hover:bg-notary-dark-secondary/50'
-                            }`}
-                    >
-                        <input {...dropzoneInputProps} />
-                        <div className="w-16 h-16 rounded-full bg-notary-cyan/10 flex items-center justify-center mx-auto mb-4">
-                            <Upload className="w-8 h-8 text-notary-cyan" />
+        <div className="min-h-screen bg-[#F5F2EA] text-[#111418] py-10 px-4 sm:px-6 lg:px-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            <div className="max-w-7xl mx-auto">
+                <div className="relative overflow-hidden rounded-[28px] border border-[#E3DED1] bg-gradient-to-br from-[#FDF9EF] via-[#F2F7F1] to-[#EAF1FF] p-8 sm:p-10 mb-10">
+                    <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-[#8CD6FF]/25 blur-3xl" />
+                    <div className="absolute -bottom-28 -left-10 h-72 w-72 rounded-full bg-[#FFD28C]/30 blur-3xl" />
+                    <div className="relative z-10 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
+                        <div>
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#111418] text-[#FDF9EF] text-xs font-semibold tracking-[0.2em] uppercase mb-4">
+                                Live Market
+                            </div>
+                            <h1 className="font-heading text-4xl sm:text-5xl font-bold text-[#111418] leading-tight mb-3">
+                                Verified documents,
+                                <span className="block text-[#0C6CF2]">ready to trade.</span>
+                            </h1>
+                            <p className="text-[#4E564C] text-base max-w-xl">
+                                Discover real, notarized files from wallets across the network. Pay once, access instantly — no middlemen, no edits.
+                            </p>
                         </div>
-                        <p className="text-white font-medium mb-2">
-                            {isDragActive ? 'Drop your file here' : 'Drag & drop a file to verify'}
-                        </p>
-                        <p className="text-slate-500 text-sm">
-                            or click to browse • SHA-256 hash will be computed automatically
-                        </p>
-                    </div>
-
-                    {/* File info and hash */}
-                    {file && (
-                        <div className="mt-6 p-6 rounded-2xl notary-card animate-slide-up">
-                            <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center space-x-3">
-                                    <div className="w-12 h-12 rounded-xl bg-notary-cyan/10 flex items-center justify-center text-2xl">
-                                        {file.type.includes('pdf') ? '📄' : file.type.includes('image') ? '🖼️' : '📎'}
+                        <div className="grid grid-cols-3 gap-3">
+                            {[
+                                { icon: <FileText className="w-4 h-4" />, label: 'Listed', value: String(listings.length) },
+                                { icon: <ShoppingBag className="w-4 h-4" />, label: 'Sold', value: String(totalSold) },
+                                { icon: <Shield className="w-4 h-4" />, label: 'On-chain', value: '100%' },
+                            ].map((s) => (
+                                <div key={s.label} className="rounded-2xl border border-[#E3DED1] bg-white/80 px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
+                                    <div className="flex items-center gap-2 text-[#0C6CF2] mb-1">
+                                        {s.icon}
+                                        <p className="text-xs font-medium text-[#3C4339]">{s.label}</p>
                                     </div>
-                                    <div>
-                                        <h3 className="font-heading font-semibold text-white">
-                                            {file.name}
-                                        </h3>
-                                        <p className="text-slate-400 text-sm">
-                                            {(file.size / 1024).toFixed(2)} KB
-                                        </p>
-                                    </div>
+                                    <p className="text-[#111418] font-semibold text-xl leading-none">{s.value}</p>
                                 </div>
-                                <button
-                                    onClick={() => {
-                                        setFile(null);
-                                        setFileHash('');
-                                        setResult(null);
-                                    }}
-                                    className="text-slate-400 hover:text-white transition-colors"
-                                >
-                                    ✕
-                                </button>
-                            </div>
-
-                            <div className="p-4 rounded-xl bg-notary-dark">
-                                <span className="text-slate-500 text-sm flex items-center mb-2">
-                                    <Hash className="w-4 h-4 mr-1" />
-                                    SHA-256 Hash
-                                </span>
-                                <p className="font-mono text-xs text-notary-cyan break-all">
-                                    {fileHash}
-                                </p>
-                            </div>
-
-                            <button
-                                onClick={() => handleVerify()}
-                                disabled={isVerifying || !fileHash}
-                                className={`mt-4 w-full py-4 rounded-xl font-heading font-bold text-lg transition-all ${isVerifying || !fileHash
-                                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                    : 'bg-notary-cyan text-notary-dark hover:bg-notary-cyan-dim glow-cyan-hover'
-                                    }`}
-                            >
-                                {isVerifying ? (
-                                    <span className="flex items-center justify-center">
-                                        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                                        Verifying on Blockchain...
-                                    </span>
-                                ) : (
-                                    <span className="flex items-center justify-center">
-                                        <Search className="w-5 h-5 mr-2" />
-                                        Verify Now
-                                    </span>
-                                )}
-                            </button>
+                            ))}
                         </div>
-                    )}
-                </div>
-
-                {/* Divider */}
-                <div className="relative my-12">
-                    <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-slate-700"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                        <span className="px-4 bg-notary-dark text-slate-500">OR</span>
                     </div>
                 </div>
 
-                {/* Manual Hash Input */}
-                <div className="mb-8">
-                    <label className="block text-slate-400 text-sm mb-2">
-                        Paste File Hash Manually
-                    </label>
-                    <div className="flex gap-4">
+                <div className="mb-5 flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B6F66]" />
                         <input
                             type="text"
-                            value={manualHash}
-                            onChange={(e) => setManualHash(e.target.value)}
-                            placeholder="Enter SHA-256 hash..."
-                            className="flex-1 px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all font-mono text-sm"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search documents, sellers, tags..."
+                            className="w-full pl-11 pr-10 py-3 rounded-2xl bg-white border border-[#E3DED1] text-[#111418] placeholder-[#8A8F83] focus:border-[#0C6CF2] focus:ring-1 focus:ring-[#0C6CF2] transition-all text-sm"
                         />
-                        <button
-                            onClick={handleManualVerify}
-                            disabled={isVerifying || !manualHash}
-                            className={`px-6 py-3 rounded-xl font-semibold transition-all ${isVerifying || !manualHash
-                                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                : 'bg-notary-cyan text-notary-dark hover:bg-notary-cyan-dim'
-                                }`}
-                        >
-                            Verify
-                        </button>
+                        {search && (
+                            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8F83] hover:text-[#111418]">
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
                     </div>
+                    <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                        className="px-4 py-3 rounded-2xl bg-white border border-[#E3DED1] text-[#111418] focus:border-[#0C6CF2] transition-all text-sm"
+                    >
+                        <option value="recent">Most Recent</option>
+                        <option value="popular">Most Popular</option>
+                        <option value="price_asc">Price: Low → High</option>
+                        <option value="price_desc">Price: High → Low</option>
+                    </select>
+                    <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={`flex items-center gap-2 px-4 py-3 rounded-2xl border text-sm font-medium transition-all ${showFilters ? 'border-[#0C6CF2] bg-[#0C6CF2]/10 text-[#0C6CF2]' : 'border-[#E3DED1] bg-white text-[#6B6F66] hover:border-[#0C6CF2]/60'}`}
+                    >
+                        <Filter className="w-4 h-4" />
+                        Filter
+                        <ChevronDown className={`w-3 h-3 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                    </button>
                 </div>
 
-                {/* Results */}
-                {result && (
-                    <div className="animate-fade-in">
-                        {result.found && result.document ? (
-                            /* Verified Result */
-                            <div className="rounded-2xl overflow-hidden">
-                                <div className="bg-notary-success/10 border border-notary-success/30 p-4 flex items-center justify-center">
-                                    <CheckCircle className="w-6 h-6 text-notary-success mr-2" />
-                                    <span className="text-notary-success font-semibold">VERIFIED</span>
-                                </div>
+                {showFilters && (
+                    <div className="mb-5 flex flex-wrap gap-2 p-4 rounded-2xl bg-white border border-[#E3DED1]">
+                        <span className="text-[#6B6F66] text-xs self-center mr-1">Type:</span>
+                        {docTypes.map((type) => (
+                            <button
+                                key={type}
+                                onClick={() => setFilterType(type)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${filterType === type
+                                    ? 'bg-[#111418] text-[#FDF9EF] border-[#111418]'
+                                    : 'border-[#E3DED1] text-[#6B6F66] hover:border-[#0C6CF2]/40 hover:text-[#111418]'}`}
+                            >
+                                {type === 'All' ? 'All Types' : type}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
-                                <div className="notary-card p-6">
-                                    {/* Certificate Header */}
-                                    <div className="flex items-center justify-between mb-6 pb-6 border-b border-notary-slate-dark/30">
-                                        <div>
-                                            <h3 className="font-heading text-2xl font-bold text-white mb-1">
-                                                {result.document.title}
-                                            </h3>
-                                            <span className="inline-block px-3 py-1 rounded-full bg-notary-cyan/10 text-notary-cyan text-sm font-medium">
-                                                {result.document.documentType}
-                                            </span>
-                                        </div>
-                                        <div className="relative">
-                                            <div className="w-20 h-20 rounded-full bg-notary-success/10 flex items-center justify-center">
-                                                <Award className="w-10 h-10 text-notary-success" />
-                                            </div>
-                                            <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-notary-success flex items-center justify-center">
-                                                <CheckCircle className="w-4 h-4 text-white" />
-                                            </div>
-                                        </div>
-                                    </div>
+                <p className="text-[#6B6F66] text-sm mb-6">
+                    Showing <span className="text-[#111418] font-semibold">{filtered.length}</span> listings
+                    {filterType !== 'All' && <> in <span className="text-[#0C6CF2]">{filterType}</span></>}
+                    {search && <> for <span className="text-[#0C6CF2]">"{search}"</span></>}
+                </p>
 
-                                    {/* Details Grid */}
-                                    <div className="grid sm:grid-cols-2 gap-6 mb-6">
-                                        <div className="p-4 rounded-xl bg-notary-dark">
-                                            <span className="text-slate-500 text-xs flex items-center mb-2">
-                                                <User className="w-3 h-3 mr-1" />
-                                                Owner
-                                            </span>
-                                            <p className="text-white font-medium">
-                                                {result.document.ownerName}
-                                            </p>
-                                            <p className="font-mono text-xs text-notary-cyan mt-1">
-                                                {truncateHash(result.document.ownerAddress, 8, 6)}
-                                            </p>
+                {isLoading ? (
+                    <div className="py-24 text-center text-[#6B6F66]">
+                        <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-[#0C6CF2]" />
+                        Loading marketplace...
+                    </div>
+                ) : loadError ? (
+                    <div className="py-24 text-center">
+                        <BookOpen className="w-12 h-12 mx-auto mb-4 text-[#6B6F66]" />
+                        <h3 className="font-heading text-xl font-semibold text-[#111418] mb-2">Market is quiet</h3>
+                        <p className="text-[#6B6F66]">{loadError}</p>
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <div className="py-24 text-center">
+                        <BookOpen className="w-12 h-12 mx-auto mb-4 text-[#6B6F66]" />
+                        <h3 className="font-heading text-xl font-semibold text-[#111418] mb-2">No listings yet</h3>
+                        <p className="text-[#6B6F66]">Be the first to list a verified document.</p>
+                    </div>
+                ) : (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {filtered.map((listing, idx) => (
+                            <div
+                                key={listing.id}
+                                className="group rounded-3xl overflow-hidden flex flex-col cursor-pointer border border-[#E3DED1] bg-white shadow-[0_10px_30px_rgba(17,20,24,0.08)] hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(17,20,24,0.12)] transition-all duration-300"
+                                style={{ animationDelay: `${idx * 0.05}s` }}
+                                onClick={() => openModal(listing)}
+                            >
+                                <div className="h-1 w-full bg-gradient-to-r from-[#0C6CF2] via-[#38BDF8] to-[#F59E0B]" />
+                                <div className="p-5 flex flex-col flex-1">
+                                    <div className="flex items-start justify-between mb-4">
+                                        <div className="w-11 h-11 rounded-xl bg-[#111418] text-white flex items-center justify-center text-xl">
+                                            {docTypeIcons[listing.documentType] ?? '📄'}
                                         </div>
-
-                                        <div className="p-4 rounded-xl bg-notary-dark">
-                                            <span className="text-slate-500 text-xs flex items-center mb-2">
-                                                <Calendar className="w-3 h-3 mr-1" />
-                                                Mint Date
-                                            </span>
-                                            <p className="text-white font-medium">
-                                                {formatDate(result.document.mintDate)}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 rounded-xl bg-notary-dark">
-                                            <span className="text-slate-500 text-xs flex items-center mb-2">
-                                                <Hash className="w-3 h-3 mr-1" />
-                                                Token ID
-                                            </span>
-                                            <p className="font-mono text-notary-cyan font-bold">
-                                                #{result.document.tokenId}
-                                            </p>
-                                        </div>
-
-                                        <div className="p-4 rounded-xl bg-notary-dark">
-                                            <span className="text-slate-500 text-xs flex items-center mb-2">
-                                                <FileText className="w-3 h-3 mr-1" />
-                                                File Name
-                                            </span>
-                                            <p className="text-white truncate">
-                                                {result.document.fileName}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Full Hash */}
-                                    <div className="p-4 rounded-xl bg-notary-dark mb-6">
-                                        <span className="text-slate-500 text-xs flex items-center mb-2">
-                                            <Hash className="w-3 h-3 mr-1" />
-                                            File Hash (SHA-256)
+                                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${docTypeColors[listing.documentType] ?? docTypeColors['Other']}`}>
+                                            {listing.documentType}
                                         </span>
-                                        <p className="font-mono text-xs text-notary-cyan break-all">
-                                            {result.document.fileHash}
-                                        </p>
                                     </div>
 
-                                    {/* Transaction */}
-                                    <div className="p-4 rounded-xl bg-notary-dark">
-                                        <span className="text-slate-500 text-xs flex items-center mb-2">
-                                            Transaction Hash
-                                        </span>
-                                        <p className="font-mono text-xs text-slate-400 break-all mb-2">
-                                            {result.document.transactionHash}
-                                        </p>
-                                        <a
-                                            href="#"
-                                            className="inline-flex items-center text-notary-cyan text-sm hover:underline"
-                                            onClick={(e) => e.preventDefault()}
-                                        >
-                                            View on Explorer
-                                            <ExternalLink className="w-3 h-3 ml-1" />
-                                        </a>
-                                    </div>
-
-                                    <div className="p-4 rounded-xl bg-notary-dark-secondary/50 border border-notary-slate-dark/30">
-                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                            <div>
-                                                <span className="text-slate-500 text-xs block mb-1">Access Request</span>
-                                                <p className="text-slate-300 text-sm">Request access from the owner to unlock the original file.</p>
-                                            </div>
-                                            <button
-                                                onClick={handleRequestAccess}
-                                                disabled={isRequestingAccess || !wallet.isConnected}
-                                                className="px-4 py-2 rounded-lg bg-notary-cyan/10 border border-notary-cyan text-notary-cyan font-semibold hover:bg-notary-cyan/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                            >
-                                                {isRequestingAccess ? 'Sending...' : 'Request Access'}
-                                            </button>
-                                        </div>
-                                        {!wallet.isConnected ? (
-                                            <p className="text-xs text-slate-500 mt-2">Connect a wallet to send an access request.</p>
-                                        ) : null}
-                                        {requestMessage ? (
-                                            <p className="text-xs text-notary-success mt-2">{requestMessage}</p>
-                                        ) : null}
-                                        {requestError ? (
-                                            <p className="text-xs text-red-400 mt-2">{requestError}</p>
-                                        ) : null}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            /* Not Found Result */
-                            <div className="rounded-2xl overflow-hidden animate-fade-in">
-                                <div className="bg-red-500/10 border border-red-500/30 p-4 flex items-center justify-center">
-                                    <XCircle className="w-6 h-6 text-red-500 mr-2" />
-                                    <span className="text-red-500 font-semibold">NOT FOUND</span>
-                                </div>
-
-                                <div className="notary-card p-8 text-center">
-                                    <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-                                        <XCircle className="w-8 h-8 text-red-500" />
-                                    </div>
-                                    <h3 className="font-heading text-xl font-semibold text-white mb-2">
-                                        No Notarization Record Found
+                                    <h3 className="font-heading font-semibold text-[#111418] text-base leading-snug mb-1.5 group-hover:text-[#0C6CF2] transition-colors line-clamp-2">
+                                        {listing.title}
                                     </h3>
-                                    <p className="text-slate-400 mb-6">
-                                        This file has not been notarized on the blockchain.
-                                        <br />
-                                        Upload and notarize it to create a permanent proof of existence.
+                                    <p className="text-[#6B6F66] text-xs leading-relaxed mb-4 line-clamp-2 flex-1">
+                                        {listing.description}
                                     </p>
+
+                                    {listing.tags.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5 mb-4">
+                                            {listing.tags.slice(0, 3).map((tag) => (
+                                                <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F5F2EA] text-[#6B6F66] text-xs border border-[#E3DED1]">
+                                                    <Tag className="w-2.5 h-2.5" />{tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-center justify-between pt-3 border-t border-[#E3DED1] mb-4">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-[#0C6CF2]/15 flex items-center justify-center text-[#0C6CF2] text-xs font-bold">
+                                                {listing.ownerName.charAt(0)}
+                                            </div>
+                                            <span className="text-[#6B6F66] text-xs truncate max-w-[100px]">{listing.ownerName}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                                            <span className="text-xs text-[#111418] font-medium">
+                                                {listing.seller_rating == null ? 'New' : listing.seller_rating.toFixed(1)}
+                                            </span>
+                                            <span className="text-xs text-[#8A8F83] ml-0.5">· {listing.sales_count ?? 0} sold</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            {listing.price != null ? (
+                                                <>
+                                                    <p className="text-[#0C6CF2] font-bold text-lg leading-none">{listing.price.toFixed(3)}</p>
+                                                    <p className="text-[#6B6F66] text-xs mt-0.5">{listing.currency}</p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <p className="text-[#6B6F66] font-semibold text-sm leading-none">Not listed</p>
+                                                    <p className="text-[#8A8F83] text-xs mt-0.5">Contact seller</p>
+                                                </>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); openModal(listing); }}
+                                            disabled={listing.price == null}
+                                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${listing.price == null
+                                                ? 'border-[#E3DED1] text-[#9AA094] bg-[#F5F2EA] cursor-not-allowed'
+                                                : 'border-[#0C6CF2] text-[#0C6CF2] bg-[#0C6CF2]/10 hover:bg-[#0C6CF2] hover:text-white'
+                                                }`}
+                                        >
+                                            <ShoppingBag className="w-3.5 h-3.5" />
+                                            Buy
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        )}
+                        ))}
                     </div>
                 )}
             </div>
+
+            {selectedListing && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4 py-8"
+                    onClick={closeModal}
+                >
+                    <div
+                        className="w-full max-w-lg rounded-3xl border border-[#E3DED1] bg-white overflow-hidden shadow-2xl"
+                        style={{ fontFamily: "'DM Sans', sans-serif" }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="h-1 w-full bg-gradient-to-r from-[#0C6CF2] via-[#38BDF8] to-[#F59E0B]" />
+
+                        <div className="p-6">
+                            <div className="flex items-start justify-between mb-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-12 h-12 rounded-xl bg-[#111418] text-white flex items-center justify-center text-2xl flex-shrink-0">
+                                        {docTypeIcons[selectedListing.documentType] ?? '📄'}
+                                    </div>
+                                    <div>
+                                        <h3 className="font-heading text-lg font-bold text-[#111418] leading-snug">
+                                            {selectedListing.title}
+                                        </h3>
+                                        <span className={`text-xs px-2 py-0.5 rounded-full border ${docTypeColors[selectedListing.documentType]}`}>
+                                            {selectedListing.documentType}
+                                        </span>
+                                    </div>
+                                </div>
+                                <button onClick={closeModal} disabled={isPurchasing} className="text-[#6B6F66] hover:text-[#111418] transition-colors flex-shrink-0 ml-3">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <p className="text-[#6B6F66] text-sm leading-relaxed mb-5">{selectedListing.description}</p>
+
+                            <div className="grid grid-cols-2 gap-3 mb-5">
+                                <div className="p-3 rounded-xl bg-[#F5F2EA]">
+                                    <p className="text-[#6B6F66] text-xs flex items-center gap-1 mb-1"><User className="w-3 h-3" /> Seller</p>
+                                    <p className="text-[#111418] text-sm font-medium truncate">{selectedListing.ownerName}</p>
+                                    <div className="flex items-center gap-1 mt-0.5">
+                                        <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                                        <span className="text-xs text-[#6B6F66]">
+                                            {selectedListing.seller_rating == null ? 'New' : selectedListing.seller_rating.toFixed(1)} · {selectedListing.sales_count} sold
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="p-3 rounded-xl bg-[#F5F2EA]">
+                                    <p className="text-[#6B6F66] text-xs flex items-center gap-1 mb-1"><FileText className="w-3 h-3" /> File</p>
+                                    <p className="text-[#111418] text-sm font-medium truncate">{selectedListing.fileName}</p>
+                                    <p className="text-[#6B6F66] text-xs mt-0.5">{formatSize(selectedListing.fileSize)}</p>
+                                </div>
+                                <div className="p-3 rounded-xl bg-[#F5F2EA]">
+                                    <p className="text-[#6B6F66] text-xs flex items-center gap-1 mb-1"><Hash className="w-3 h-3" /> Token ID</p>
+                                    <p className="font-mono text-[#0C6CF2] text-sm font-bold">#{selectedListing.tokenId}</p>
+                                </div>
+                                <div className="p-3 rounded-xl bg-[#F5F2EA]">
+                                    <p className="text-[#6B6F66] text-xs flex items-center gap-1 mb-1"><Calendar className="w-3 h-3" /> Notarized</p>
+                                    <p className="text-[#111418] text-sm font-medium">{formatDate(selectedListing.mintDate)}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 p-3 rounded-xl bg-[#E9F7EE] border border-[#BDE9C9] mb-5">
+                                <Shield className="w-4 h-4 text-[#2D8A57] flex-shrink-0" />
+                                <p className="text-[#2D8A57] text-xs font-medium">Verified on blockchain — immutable ownership proof</p>
+                                <Award className="w-4 h-4 text-[#2D8A57] ml-auto flex-shrink-0" />
+                            </div>
+
+                            {selectedListing.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-5">
+                                    {selectedListing.tags.map((tag) => (
+                                        <span key={tag} className="px-2 py-0.5 rounded-md bg-[#F5F2EA] text-[#6B6F66] text-xs border border-[#E3DED1]">
+                                            #{tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            {purchaseSuccess ? (
+                                <div className="rounded-xl bg-[#E9F7EE] border border-[#BDE9C9] p-4 flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-[#2D8A57] flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-[#2D8A57] font-semibold text-sm">Purchase request sent!</p>
+                                        <p className="text-[#6B6F66] text-xs mt-1">The seller will review your request. Once approved, the document will appear in <strong>Shared Documents</strong>.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="flex items-center justify-between p-4 rounded-xl bg-[#F5F2EA] mb-4">
+                                        <div>
+                                            <p className="text-[#6B6F66] text-xs mb-1">Price</p>
+                                            {selectedListing.price != null ? (
+                                                <p className="text-[#0C6CF2] font-bold text-2xl leading-none">
+                                                    {selectedListing.price.toFixed(3)}
+                                                    <span className="text-base font-normal text-[#6B6F66] ml-1">{selectedListing.currency}</span>
+                                                </p>
+                                            ) : (
+                                                <p className="text-[#6B6F66] font-semibold text-sm leading-none">Not listed</p>
+                                            )}
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[#6B6F66] text-xs mb-1">You receive</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <Download className="w-4 h-4 text-[#0C6CF2]" />
+                                                <span className="text-[#111418] text-sm font-medium">Full file access</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {purchaseError && (
+                                        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                                            {purchaseError}
+                                        </div>
+                                    )}
+
+                                    {!wallet.isConnected && (
+                                        <div className="mb-4 p-3 rounded-xl bg-[#FFF3D6] border border-[#F1C27D] flex items-center gap-2 text-[#A76815] text-xs">
+                                            <Wallet className="w-4 h-4 flex-shrink-0" />
+                                            Connect your wallet to purchase this document.
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={closeModal}
+                                            disabled={isPurchasing}
+                                            className="flex-1 px-4 py-2.5 rounded-xl border border-[#E3DED1] text-[#6B6F66] text-sm font-medium hover:border-[#0C6CF2]/40 hover:text-[#111418] transition-all disabled:opacity-60"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handlePurchase}
+                                            disabled={isPurchasing || selectedListing.price == null}
+                                            className="flex-1 px-4 py-2.5 rounded-xl bg-[#0C6CF2] text-white text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                            {isPurchasing ? (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    Processing...
+                                                </span>
+                                            ) : (
+                                                'Purchase'
+                                            )}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

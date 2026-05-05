@@ -109,7 +109,7 @@ const SharedDocuments = () => {
             <div className="max-w-7xl mx-auto">
                 <div className="mb-8 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h1 className="font-heading text-3xl font-bold text-white mb-2">Shared Documents</h1>
+                        <h1 className="font-heading text-3xl font-bold text-[#121317] mb-6">Shared Documents</h1>
                         <p className="text-slate-400">Documents that owners have approved for your wallet.</p>
                     </div>
                     {wallet.address ? (
@@ -150,7 +150,7 @@ const SharedDocuments = () => {
                                         </div>
                                         <div>
                                             <div className="flex flex-wrap items-center gap-2 mb-1">
-                                                <h3 className="font-heading text-lg font-semibold text-white">{document.title}</h3>
+                                                <h3 className="font-heading text-lg font-semibold text-slate-800">{document.title}</h3>
                                                 <span className="px-2 py-0.5 rounded-full bg-notary-success/15 text-notary-success text-xs border border-notary-success/30">
                                                     Approved
                                                 </span>

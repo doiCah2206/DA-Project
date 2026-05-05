@@ -9,6 +9,7 @@ import {
   Share2,
   Eye,
   Award,
+  ShoppingBag,
   ChevronDown,
   ChevronUp,
   GitBranch,
@@ -53,6 +54,11 @@ const Documents = () => {
   const [shareTarget, setShareTarget] = useState<NotarizedDocument | null>(
     null,
   );
+  const [listTarget, setListTarget] = useState<NotarizedDocument | null>(null);
+  const [listPrice, setListPrice] = useState('');
+  const [listError, setListError] = useState<string | null>(null);
+  const [listSuccess, setListSuccess] = useState<string | null>(null);
+  const [isListing, setIsListing] = useState(false);
   const [shareWalletAddress, setShareWalletAddress] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [shareError, setShareError] = useState<string | null>(null);
@@ -211,6 +217,13 @@ const Documents = () => {
     setShareSuccess(null);
   };
 
+  const openListModal = (doc: NotarizedDocument) => {
+    setListTarget(doc);
+    setListPrice('');
+    setListError(null);
+    setListSuccess(null);
+  };
+
   const closeShareModal = () => {
     if (isSharing) return;
     setShareTarget(null);
@@ -218,6 +231,14 @@ const Documents = () => {
     setShareMessage("");
     setShareError(null);
     setShareSuccess(null);
+  };
+
+  const closeListModal = () => {
+    if (isListing) return;
+    setListTarget(null);
+    setListPrice('');
+    setListError(null);
+    setListSuccess(null);
   };
 
   const handleShareByWallet = async () => {
@@ -279,11 +300,66 @@ const Documents = () => {
     }
   };
 
+  const handleListForSale = async () => {
+    if (!listTarget) return;
+
+    if (!token) {
+      setListError("Chua xac thuc. Vui long ket noi vi lai.");
+      return;
+    }
+
+    if (!wallet.isConnected || !wallet.address) {
+      setListError("Vui long ket noi vi truoc khi ban tai lieu.");
+      return;
+    }
+
+    const priceValue = Number(listPrice);
+    if (!Number.isFinite(priceValue) || priceValue <= 0) {
+      setListError("Gia ban khong hop le.");
+      return;
+    }
+
+    setIsListing(true);
+    setListError(null);
+    setListSuccess(null);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"}/documents/${listTarget.id}/list-for-sale`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "x-wallet-address": wallet.address,
+          },
+          body: JSON.stringify({ price: priceValue }),
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({} as { message?: string }));
+
+      if (!response.ok) {
+        throw new Error(data.message || "Khong tao duoc listing.");
+      }
+
+      setListSuccess(data.message || "Da tao listing thanh cong.");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Khong tao duoc listing.";
+      setListError(message);
+    } finally {
+      setIsListing(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="font-heading text-3xl font-bold text-white mb-2">
+          <h1 className="font-heading text-3xl font-bold text-gray-900 mb-2">
             My Documents
           </h1>
           <p className="text-slate-400">
@@ -372,7 +448,7 @@ const Documents = () => {
                           {getFileIcon(latest.fileType)}
                         </div>
                         <div>
-                          <h3 className="font-heading font-semibold text-white truncate max-w-[320px]">
+                          <h3 className="font-heading font-semibold text-gray-900 truncate max-w-[320px]">
                             {latest.title}
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
@@ -470,6 +546,13 @@ const Documents = () => {
                                 <Share2 className="w-4 h-4" />
                               </button> */}
                               <button
+                                onClick={() => openListModal(version)}
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
+                                title="List for Sale"
+                              >
+                                <ShoppingBag className="w-4 h-4" />
+                              </button>
+                              <button
                                 onClick={() => openShareModal(version)}
                                 className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
                                 title="Share By Wallet"
@@ -505,7 +588,7 @@ const Documents = () => {
             <div className="w-24 h-24 rounded-full bg-notary-dark-secondary flex items-center justify-center mx-auto mb-6">
               <FileText className="w-12 h-12 text-slate-600" />
             </div>
-            <h3 className="font-heading text-xl font-semibold text-white mb-2">
+            <h3 className="font-heading text-xl font-semibold text-gray-900 mb-2">
               No Documents Found
             </h3>
             <p className="text-slate-500 mb-6">
@@ -528,7 +611,7 @@ const Documents = () => {
           >
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <h3 className="font-heading text-xl font-semibold text-white">
+                <h3 className="font-heading text-xl font-semibold text-gray-900">
                   Share Document By Wallet
                 </h3>
                 <p className="text-slate-400 text-sm mt-1">
@@ -603,6 +686,83 @@ const Documents = () => {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : null}
                   Share Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {listTarget ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={closeListModal}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-notary-slate-dark bg-notary-dark-secondary p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-heading text-xl font-semibold text-gray-900">
+                  List Document for Sale
+                </h3>
+                <p className="text-slate-400 text-sm mt-1">{listTarget.title}</p>
+              </div>
+              <button
+                onClick={closeListModal}
+                className="text-slate-500 hover:text-white transition-colors"
+                disabled={isListing}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-slate-300 text-sm mb-2">
+                  Price (TEST)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={listPrice}
+                  onChange={(event) => setListPrice(event.target.value)}
+                  placeholder="0.025"
+                  className="w-full px-4 py-3 rounded-xl bg-notary-dark border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all text-sm"
+                />
+              </div>
+
+              {listError ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-300 text-sm">
+                  {listError}
+                </div>
+              ) : null}
+
+              {listSuccess ? (
+                <div className="rounded-xl border border-notary-success/30 bg-notary-success/10 px-3 py-2 text-notary-success text-sm">
+                  {listSuccess}
+                </div>
+              ) : null}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={closeListModal}
+                  disabled={isListing}
+                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-300 hover:text-white hover:border-slate-500 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    void handleListForSale();
+                  }}
+                  disabled={isListing}
+                  className="px-4 py-2 rounded-xl bg-notary-cyan text-notary-dark font-semibold hover:bg-notary-cyan-dim transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {isListing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  List Now
                 </button>
               </div>
             </div>

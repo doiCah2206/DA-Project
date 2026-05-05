@@ -6,20 +6,23 @@ export default {
     theme: {
         extend: {
             colors: {
-                'notary-dark': '#0A0E1A',
-                'notary-dark-secondary': '#111827',
-                'notary-cyan': '#00D4FF',
-                'notary-cyan-dim': '#00A3CC',
-                'notary-gold': '#F5C842',
-                'notary-gold-dim': '#D4A832',
-                'notary-slate': '#64748B',
-                'notary-slate-dark': '#334155',
-                'notary-success': '#10B981',
+                'notary-dark': '#F7F5F0',
+                'notary-dark-secondary': '#EEEAE2',
+                'notary-cyan': '#1A56FF',
+                'notary-cyan-dim': '#1244D4',
+                'notary-gold': '#FF4D1C',
+                'notary-gold-dim': '#D43A0F',
+                'notary-slate': '#888888',
+                'notary-slate-dark': '#CCCCCC',
+                'notary-success': '#0ACF83',
                 'notary-error': '#EF4444',
+                'ink': '#0D0D0D',
+                'ink2': '#666666',
+                'soft': '#E8E4DC',
             },
             fontFamily: {
                 'mono': ['"Space Mono"', 'monospace'],
-                'heading': ['Syne', 'sans-serif'],
+                'heading': ['DM Sans', 'sans-serif'],
                 'body': ['"DM Sans"', 'sans-serif'],
             },
             animation: {

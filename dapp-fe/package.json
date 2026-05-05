@@ -1,5 +1,5 @@
 {
-  "name": "dapp-fe",
+  "name": "docchain",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -17,7 +17,9 @@
     "react-dom": "^19.2.4",
     "react-dropzone": "^14.3.8",
     "react-router-dom": "^7.13.1",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.12",
+    "gsap": "^3.12.5",
+    "@gsap/react": "^2.1.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
