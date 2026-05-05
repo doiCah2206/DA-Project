@@ -482,7 +482,7 @@ const Documents = () => {
                       </div>
                     </div>
 
-                    <div className="mb-4 p-3 rounded-lg bg-notary-dark">
+                    <div className="mb-4 p-3 rounded-lg bg-[#E8E4DC]">
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500 text-xs flex items-center">
                           <Hash className="w-3 h-3 mr-1" />
@@ -510,11 +510,11 @@ const Documents = () => {
                       {group.versions.map((version, idx) => (
                         <div
                           key={version.id}
-                          className="rounded-xl bg-notary-dark-secondary/50 border border-notary-slate-dark/40 p-4"
+                          className="rounded-xl bg-white border border-[#CCCCCC] p-4"
                         >
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div>
-                              <p className="text-white font-medium">
+                              <p className="text-gray-900 font-medium">
                                 Version V{group.versions.length - idx} • Token #
                                 {version.tokenId}
                               </p>
@@ -606,7 +606,7 @@ const Documents = () => {
           onClick={closeShareModal}
         >
           <div
-            className="w-full max-w-lg rounded-2xl border border-notary-slate-dark bg-notary-dark-secondary p-6"
+            className="w-full max-w-lg rounded-2xl border border-[#CCCCCC] bg-white p-6"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 mb-4">

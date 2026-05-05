@@ -679,7 +679,7 @@ export const listForSale = async (req: Request, res: Response) => {
 export const getMarketplace = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT id, token_id, file_name, file_type, title, document_type,
+      `SELECT id, token_id, file_hash, file_name, file_type, file_size, title, document_type,
               description, owner_name, owner_address, tags, transaction_hash,
               ipfs_uri, ipfs_cid, mint_date, price, currency
        FROM documents
@@ -687,7 +687,7 @@ export const getMarketplace = async (req: Request, res: Response) => {
        ORDER BY mint_date DESC`
     );
 
-    return res.json({ documents: result.rows });
+    return res.json({ listings: result.rows });
   } catch (error) {
     console.error("Lỗi getMarketplace:", error);
     return res.status(500).json({ message: "Lỗi server" });

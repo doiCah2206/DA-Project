@@ -395,7 +395,7 @@ const Notarize = () => {
                                         }`}
                                 >
                                     <div className="flex items-center justify-between mb-1">
-                                        <span className="text-white font-medium">{latest.title}</span>
+                                        <span className="text-gray-900 font-medium">{latest.title}</span>
                                         <span className="text-xs px-2 py-1 rounded-full bg-notary-dark text-notary-cyan">
                                             {versions.length} version(s)
                                         </span>
@@ -433,7 +433,7 @@ const Notarize = () => {
                     <div className="w-20 h-20 rounded-full bg-notary-cyan/10 flex items-center justify-center mx-auto mb-6">
                         <Upload className="w-10 h-10 text-notary-cyan" />
                     </div>
-                    <p className="text-white font-medium text-lg mb-2">
+                    <p className="text-gray-900 font-medium text-lg mb-2">
                         {isDragActive ? 'Drop your file here' : 'Drag & drop your file here'}
                     </p>
                     <p className="text-slate-500">or click to browse</p>
@@ -685,31 +685,31 @@ const Notarize = () => {
 
                     <div className="space-y-4">
                         <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
-                            <span className="text-slate-400">Mode</span>
-                            <span className="text-white">{versionMode === 'existing' ? 'Add Version' : 'New Document'}</span>
+                            <span className="text-slate-600">Mode</span>
+                            <span className="text-gray-900">{versionMode === 'existing' ? 'Add Version' : 'New Document'}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
-                            <span className="text-slate-400">Version</span>
-                            <span className="text-white">V{nextVersionNumber}</span>
+                            <span className="text-slate-600">Version</span>
+                            <span className="text-gray-900">V{nextVersionNumber}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
-                            <span className="text-slate-400">Document</span>
-                            <span className="text-white">{formData.file?.name}</span>
+                            <span className="text-slate-600">Document</span>
+                            <span className="text-gray-900">{formData.file?.name}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
-                            <span className="text-slate-400">Title</span>
-                            <span className="text-white">{formData.title}</span>
+                            <span className="text-slate-600">Title</span>
+                            <span className="text-gray-900">{formData.title}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
-                            <span className="text-slate-400">Type</span>
-                            <span className="text-white">{formData.documentType}</span>
+                            <span className="text-slate-600">Type</span>
+                            <span className="text-gray-900">{formData.documentType}</span>
                         </div>
                         <div className="flex justify-between py-2 border-b border-notary-slate-dark/30">
-                            <span className="text-slate-400">Owner</span>
-                            <span className="text-white">{formData.ownerName}</span>
+                            <span className="text-slate-600">Owner</span>
+                            <span className="text-gray-900">{formData.ownerName}</span>
                         </div>
                         <div className="py-2">
-                            <span className="text-slate-400 block mb-2">File Hash</span>
+                            <span className="text-slate-600 block mb-2">File Hash</span>
                             <p className="font-mono text-xs text-notary-cyan break-all bg-notary-dark p-3 rounded-lg">
                                 {formData.fileHash}
                             </p>

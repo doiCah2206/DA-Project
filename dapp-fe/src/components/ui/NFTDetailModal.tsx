@@ -259,7 +259,7 @@ const NFTDetailModal = () => {
                                             onClick={() =>
                                                 setSelectedDocument(null)
                                             }
-                                            className="absolute top-4 right-4 p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
+                                            className="absolute top-4 right-4 p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-600 hover:text-gray-900 transition-colors"
                                         >
                                             <X className="w-5 h-5" />
                                         </button>
@@ -270,7 +270,7 @@ const NFTDetailModal = () => {
                                                 <Shield className="w-7 h-7 text-notary-cyan" />
                                             </div>
                                             <div>
-                                                <h2 className="font-heading text-2xl font-bold text-white">
+                                                <h2 className="font-heading text-2xl font-bold text-gray-900">
                                                     {selectedDocument.title}
                                                 </h2>
                                                 <span className="inline-block px-3 py-1 rounded-full bg-notary-success/10 text-notary-success text-sm font-medium">
@@ -299,7 +299,7 @@ const NFTDetailModal = () => {
                                                 <User className="w-3 h-3 mr-1" />
                                                 Owner
                                             </span>
-                                            <p className="text-white font-medium">
+                                            <p className="text-gray-900 font-medium">
                                                 {selectedDocument.ownerName}
                                             </p>
                                             <p className="font-mono text-xs text-notary-cyan mt-1">
@@ -319,7 +319,7 @@ const NFTDetailModal = () => {
                                                 <Calendar className="w-3 h-3 mr-1" />
                                                 Mint Date
                                             </span>
-                                            <p className="text-white font-medium">
+                                            <p className="text-gray-900 font-medium">
                                                 {formatDate(
                                                     selectedDocument.mintDate,
                                                 )}
@@ -331,7 +331,7 @@ const NFTDetailModal = () => {
                                                 <FileText className="w-3 h-3 mr-1" />
                                                 Document Type
                                             </span>
-                                            <p className="text-white font-medium">
+                                            <p className="text-gray-900 font-medium">
                                                 {selectedDocument.documentType}
                                             </p>
                                         </div>
@@ -341,7 +341,7 @@ const NFTDetailModal = () => {
                                                 <FileText className="w-3 h-3 mr-1" />
                                                 File Name
                                             </span>
-                                            <p className="text-white font-medium truncate">
+                                            <p className="text-gray-900 font-medium truncate">
                                                 {selectedDocument.fileName}
                                             </p>
                                         </div>
@@ -353,7 +353,7 @@ const NFTDetailModal = () => {
                                             <span className="text-slate-500 text-xs block mb-2">
                                                 Description
                                             </span>
-                                            <p className="text-slate-300">
+                                            <p className="text-slate-700">
                                                 {selectedDocument.description}
                                             </p>
                                         </div>
@@ -375,7 +375,7 @@ const NFTDetailModal = () => {
                                         <span className="text-slate-500 text-xs flex items-center mb-2">
                                             Transaction Hash
                                         </span>
-                                        <p className="font-mono text-xs text-slate-400 break-all">
+                                        <p className="font-mono text-xs text-slate-600 break-all">
                                             {selectedDocument.transactionHash}
                                         </p>
                                     </div>
@@ -386,7 +386,7 @@ const NFTDetailModal = () => {
                                             <LinkIcon className="w-3 h-3 mr-1" />
                                             IPFS Metadata URI
                                         </span>
-                                        <p className="font-mono text-xs text-slate-400 break-all">
+                                        <p className="font-mono text-xs text-slate-600 break-all">
                                             {selectedDocument.ipfsUri}
                                         </p>
                                     </div>
@@ -527,7 +527,7 @@ const NFTDetailModal = () => {
                                             onClick={() =>
                                                 alert("Coming soon!")
                                             }
-                                            className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl border border-notary-slate-dark text-slate-400 font-semibold hover:border-notary-cyan/50 hover:text-white transition-all"
+                                            className="flex items-center justify-center space-x-2 px-4 py-3 rounded-xl border border-notary-slate-dark text-slate-600 font-semibold hover:border-notary-cyan/50 hover:text-gray-900 transition-all"
                                             title="Xem tren blockchain explorer"
                                         >
                                             <ExternalLink className="w-5 h-5" />
