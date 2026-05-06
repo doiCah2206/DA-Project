@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { BrowserProvider } from "ethers";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Wallet, ChevronDown, LogOut } from "lucide-react";
 import { useAppStore } from "../../store";
@@ -5,7 +7,40 @@ import { useAppStore } from "../../store";
 const Navbar = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { wallet, connectWallet, disconnectWallet } = useAppStore();
+    const { wallet, connectWallet, disconnectWallet, refreshWalletBalance } = useAppStore();
+
+    useEffect(() => {
+        if (!wallet.isConnected || !wallet.address || !window.ethereum) {
+            return;
+        }
+
+        let disposed = false;
+        const ethereum = window.ethereum as typeof window.ethereum & {
+            on: (event: 'accountsChanged' | 'chainChanged', handler: (...args: unknown[]) => void) => void;
+            removeListener: (event: 'accountsChanged' | 'chainChanged', handler: (...args: unknown[]) => void) => void;
+        };
+
+        const syncBalance = () => {
+            if (!disposed) {
+                void refreshWalletBalance();
+            }
+        };
+
+        const provider = new BrowserProvider(window.ethereum as never);
+
+        syncBalance();
+
+        ethereum.on('accountsChanged', syncBalance);
+        ethereum.on('chainChanged', syncBalance);
+        provider.on('block', syncBalance);
+
+        return () => {
+            disposed = true;
+            ethereum.removeListener('accountsChanged', syncBalance);
+            ethereum.removeListener('chainChanged', syncBalance);
+            provider.off('block', syncBalance);
+        };
+    }, [wallet.address, wallet.isConnected, refreshWalletBalance]);
 
     const truncateAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
 
@@ -21,12 +56,14 @@ const Navbar = () => {
         <nav className="fixed top-0 left-0 right-0 z-50 bg-[#F7F5F0]/90 backdrop-blur-md border-b border-[#E8E4DC]">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center justify-between h-16">
-                    <Link to="/" className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-[#0D0D0D] flex items-center justify-center">
+                    <Link to="/" className="group flex items-center gap-2">
+                        {/* <div className="w-8 h-8 rounded-lg bg-[#0D0D0D] flex items-center justify-center">
                             <span className="text-white text-xs font-bold font-heading">✦</span>
-                        </div>
-                        <span className="font-heading text-[15px] font-bold text-[#0D0D0D] tracking-tight">
-                            ✦ Doc<span className="text-[#ff5e89]">Chain</span>
+                        </div> */}
+                        <span className="font-heading text-[19px] font-bold text-[#0D0D0D] tracking-tight">
+                            <span className="inline-block transition-transform duration-500 ease-out group-hover:rotate-[360deg] motion-reduce:transition-none motion-reduce:transform-none">
+                                ✦
+                            </span>{" "}Doc<span className="text-[#ff5e89]">Chain</span>
                         </span>
                     </Link>
 

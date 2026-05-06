@@ -16,6 +16,7 @@ interface AppStore {
     token: string | null;
     connectWallet: () => Promise<void>;
     disconnectWallet: () => Promise<void>;
+    refreshWalletBalance: () => Promise<void>;
     documents: NotarizedDocument[];
     fetchDocuments: () => Promise<void>;
     addDocument: (doc: NotarizedDocument) => void;
@@ -52,6 +53,21 @@ const formatEthBalance = (balanceHex: string): string => {
         .replace(/0+$/, '');
 
     return fraction ? `${whole}.${fraction}` : `${whole}.0`;
+};
+
+const fetchWalletBalance = async (address: string): Promise<string> => {
+    const provider = getEthereumProvider();
+
+    if (!provider) {
+        throw new Error('Không tìm thấy ví Web3.');
+    }
+
+    const balanceHex = await provider.request<string>({
+        method: 'eth_getBalance',
+        params: [address, 'latest'],
+    });
+
+    return formatEthBalance(balanceHex);
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -144,6 +160,27 @@ export const useAppStore = create<AppStore>((set, get) => ({
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Lỗi không xác định';
             alert(`Kết nối ví thất bại: ${message}`);
+        }
+    },
+
+    refreshWalletBalance: async () => {
+        const { wallet } = get();
+
+        if (!wallet.isConnected || !wallet.address) {
+            return;
+        }
+
+        try {
+            const balance = await fetchWalletBalance(wallet.address);
+
+            set((state) => ({
+                wallet: {
+                    ...state.wallet,
+                    balance,
+                },
+            }));
+        } catch (err) {
+            console.error('Lỗi refresh balance:', err);
         }
     },
 
