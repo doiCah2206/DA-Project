@@ -36,6 +36,11 @@ contract CertificateManager {
         uint256 price,
         address seller
     );
+    event DocumentPriceUpdated(
+        bytes32 indexed hash,
+        uint256 newPrice,
+        address seller
+    );
     event DocumentPurchased(bytes32 indexed hash, address buyer, uint256 price);
     event DocumentSaleCancelled(bytes32 indexed hash);
 
@@ -98,6 +103,23 @@ contract CertificateManager {
         sale.forSale = true;
 
         emit DocumentListedForSale(hash, price, msg.sender);
+    }
+
+    function updateSalePrice(bytes32 hash, uint256 newPrice) public {
+        require(isHashExists(hash), "CM: Hash khong ton tai");
+        require(newPrice > 0, "CM: Gia khong hop le");
+
+        Certificate memory cert = certificates[hash];
+        require(
+            msg.sender == cert.issuer || msg.sender == owner,
+            "CM: Khong co quyen"
+        );
+
+        SaleInfo storage sale = sales[hash];
+        require(sale.forSale, "CM: Chua duoc ban");
+
+        sale.price = newPrice;
+        emit DocumentPriceUpdated(hash, newPrice, msg.sender);
     }
 
     function cancelSale(bytes32 hash) public {
