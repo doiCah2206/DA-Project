@@ -13,8 +13,7 @@ contract CertificateManager {
     struct SaleInfo {
         uint256 price;
         bool forSale;
-        bool sold;
-        address buyer;
+        uint256 soldCount;
     }
 
     mapping(bytes32 => Certificate) private certificates;
@@ -22,6 +21,7 @@ contract CertificateManager {
     mapping(bytes32 => string) private _projectName;
     mapping(bytes32 => string) private _description;
     mapping(bytes32 => SaleInfo) private sales;
+    mapping(bytes32 => mapping(address => bool)) private buyers;
 
     event CertificateIssued(bytes32 indexed hash, address issuer);
     event CertificateRevoked(bytes32 indexed hash);
@@ -93,12 +93,9 @@ contract CertificateManager {
             "CM: Khong co quyen"
         );
 
-        sales[hash] = SaleInfo({
-            price: price,
-            forSale: true,
-            sold: false,
-            buyer: address(0)
-        });
+        SaleInfo storage sale = sales[hash];
+        sale.price = price;
+        sale.forSale = true;
 
         emit DocumentListedForSale(hash, price, msg.sender);
     }
@@ -121,16 +118,15 @@ contract CertificateManager {
 
         SaleInfo storage sale = sales[hash];
         require(sale.forSale, "CM: Chua duoc ban");
-        require(!sale.sold, "CM: Da duoc mua");
         require(msg.value == sale.price, "CM: Sai so tien");
         require(
             msg.sender != certificates[hash].issuer,
             "CM: Nguoi cap khong the mua"
         );
+        require(!buyers[hash][msg.sender], "CM: Da mua tai lieu");
 
-        sale.sold = true;
-        sale.forSale = false;
-        sale.buyer = msg.sender;
+        buyers[hash][msg.sender] = true;
+        sale.soldCount += 1;
 
         address payable seller = payable(certificates[hash].issuer);
         (bool sent, ) = seller.call{value: msg.value}("");
@@ -145,9 +141,7 @@ contract CertificateManager {
         }
 
         Certificate memory cert = certificates[hash];
-        SaleInfo memory sale = sales[hash];
-
-        return user == cert.issuer || user == owner || user == sale.buyer;
+        return user == cert.issuer || user == owner || buyers[hash][user];
     }
 
     function getCertificate(
@@ -188,14 +182,10 @@ contract CertificateManager {
 
     function getSaleInfo(
         bytes32 hash
-    )
-        public
-        view
-        returns (uint256 price, bool forSale, bool sold, address buyer)
-    {
+    ) public view returns (uint256 price, bool forSale, uint256 soldCount) {
         require(isHashExists(hash), "CM: Hash khong ton tai");
         SaleInfo memory sale = sales[hash];
-        return (sale.price, sale.forSale, sale.sold, sale.buyer);
+        return (sale.price, sale.forSale, sale.soldCount);
     }
 
     function revokeCertificate(bytes32 hash) public {
