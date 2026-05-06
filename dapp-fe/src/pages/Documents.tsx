@@ -278,8 +278,7 @@ const Documents = () => {
 
         try {
             const response = await fetch(
-                `${
-                    import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+                `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
                 }/documents/${shareTarget.id}/share-by-wallet`,
                 {
                     method: "POST",
@@ -688,7 +687,7 @@ const Documents = () => {
                                                                     title="Download Original File"
                                                                 >
                                                                     {downloadingId ===
-                                                                    version.id ? (
+                                                                        version.id ? (
                                                                         <Loader2 className="w-4 h-4 animate-spin" />
                                                                     ) : (
                                                                         <Download className="w-4 h-4" />

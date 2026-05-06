@@ -177,7 +177,7 @@ const SharedDocuments = () => {
                                         <button
                                             onClick={() => { void handleDownload(document); }}
                                             disabled={downloadId === document.id}
-                                            className="px-4 py-2 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white font-semibold hover:border-notary-cyan/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all inline-flex items-center gap-2"
+                                            className="px-4 py-2 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-zinc-700 font-semibold hover:border-notary-cyan/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all inline-flex items-center gap-2"
                                         >
                                             {downloadId === document.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                                             Download
