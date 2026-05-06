@@ -764,12 +764,15 @@ export const listForSale = async (req: Request, res: Response) => {
 export const getMarketplace = async (req: Request, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT id, token_id, file_hash, file_name, file_type, file_size, title, document_type,
-              description, owner_name, owner_address, tags, transaction_hash,
-              ipfs_uri, ipfs_cid, mint_date, price, currency
-       FROM documents
-       WHERE is_listed = true
-       ORDER BY mint_date DESC`
+      `SELECT d.id, d.token_id, d.file_hash, d.file_name, d.file_type, d.file_size, d.title, d.document_type,
+              d.description, d.owner_name, d.owner_address, d.tags, d.transaction_hash,
+              d.ipfs_uri, d.ipfs_cid, d.mint_date, d.price, d.currency,
+              COALESCE(COUNT(dar.id) FILTER (WHERE dar.status = 'approved' AND dar.source = 'market_purchase'), 0) AS sales_count
+       FROM documents d
+       LEFT JOIN document_access_requests dar ON dar.document_id = d.id
+       WHERE d.is_listed = true AND d.price IS NOT NULL
+       GROUP BY d.id
+       ORDER BY d.mint_date DESC`
     );
 
     return res.json({ listings: result.rows });

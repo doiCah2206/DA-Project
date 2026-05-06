@@ -1,8 +1,9 @@
 export type DocumentType =
-    | 'Contract'
-    | 'Certificate'
-    | 'ID Document'
-    | 'Legal Agreement'
+    | 'Document'
+    | 'Template'
+    | 'Guide & Report'
+    | 'Creative Asset'
+    | 'Digital Resource'
     | 'Other';
 
 export interface NotarizedDocument {
