@@ -281,6 +281,91 @@ export const createAccessRequest = async (req: Request, res: Response) => {
   }
 };
 
+// POST /api/documents/:id/purchase — tự động cấp quyền sau khi mua (không cần duyệt)
+export const purchaseDocument = async (req: Request, res: Response) => {
+  try {
+    const userId = Number((req as any).user.userId);
+    const jwtWalletAddress = String(
+      (req as any).user.wallet_address ?? "",
+    ).toLowerCase();
+    const activeWalletHeader = String(
+      req.headers["x-wallet-address"] ?? "",
+    ).toLowerCase();
+    const { id } = req.params;
+
+    if (!activeWalletHeader) {
+      return res.status(401).json({ message: "Thiếu x-wallet-address" });
+    }
+
+    if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+        });
+    }
+
+    const docResult = await pool.query(
+      "SELECT id, user_id, owner_address, is_listed, price FROM documents WHERE id = $1",
+      [id],
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy document" });
+    }
+
+    const document = docResult.rows[0];
+    const ownerAddress = String(document.owner_address ?? "").toLowerCase();
+    const ownerUserId = Number(document.user_id);
+
+    if (ownerUserId === userId || (ownerAddress && ownerAddress === activeWalletHeader)) {
+      return res.status(400).json({ message: "Bạn đang là chủ tài liệu này." });
+    }
+
+    if (!document.is_listed || !document.price) {
+      return res.status(409).json({ message: "Tài liệu chưa được đăng bán." });
+    }
+
+    const existing = await pool.query(
+      `SELECT id, status FROM document_access_requests
+             WHERE document_id = $1
+               AND requester_wallet_address = $2
+             ORDER BY created_at DESC
+             LIMIT 1`,
+      [id, activeWalletHeader],
+    );
+
+    if (existing.rows[0]?.status === "approved") {
+      return res
+        .status(409)
+        .json({ message: "Bạn đã được cấp quyền cho tài liệu này." });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO document_access_requests
+                (document_id, requester_user_id, requester_wallet_address, requester_name, message, status, source, resolved_at)
+             VALUES ($1, $2, $3, $4, 'Auto-approved after purchase', 'approved', 'market_purchase', NOW())
+             RETURNING *`,
+      [
+        id,
+        userId,
+        activeWalletHeader,
+        String((req as any).user.wallet_address ?? activeWalletHeader),
+      ],
+    );
+
+    return res.status(201).json({
+      message: "Đã cấp quyền sau khi mua.",
+      request: insertResult.rows[0],
+    });
+  } catch (error) {
+    console.error("Lỗi purchaseDocument:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
 // GET /api/documents/access-requests — chủ tài liệu xem danh sách yêu cầu
 export const getAccessRequestsForOwner = async (
   req: Request,

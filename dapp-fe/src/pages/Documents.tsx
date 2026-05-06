@@ -23,6 +23,7 @@ import {
   downloadEncryptedFile,
 } from "../utils/documentDownload";
 import { CustomSelect } from "../components/ui";
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants/contract";
 
 type DocumentGroup = {
   key: string;
@@ -313,6 +314,11 @@ const Documents = () => {
       return;
     }
 
+    if (!CONTRACT_ADDRESS) {
+      setListError("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+      return;
+    }
+
     const priceValue = Number(listPrice);
     if (!Number.isFinite(priceValue) || priceValue <= 0) {
       setListError("Gia ban khong hop le.");
@@ -324,6 +330,30 @@ const Documents = () => {
     setListSuccess(null);
 
     try {
+      const { BrowserProvider, Contract, parseEther } = await import("ethers");
+      if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+      const currentChainId = await window.ethereum.request<string>({ method: "eth_chainId" });
+      if (currentChainId !== "0x5aff") {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x5aff" }],
+          });
+        } catch {
+          throw new Error("Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi ban");
+        }
+      }
+
+      const browserProvider = new BrowserProvider(window.ethereum);
+      const signer = await browserProvider.getSigner();
+      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const hashBytes32 = listTarget.fileHash.startsWith("0x")
+        ? listTarget.fileHash
+        : `0x${listTarget.fileHash}`;
+      const weiPrice = parseEther(priceValue.toString());
+      const tx = await contract.listDocumentForSale(hashBytes32, weiPrice);
+      await tx.wait();
+
       const response = await fetch(
         `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"}/documents/${listTarget.id}/list-for-sale`,
         {

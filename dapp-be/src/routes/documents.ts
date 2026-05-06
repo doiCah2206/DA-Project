@@ -6,6 +6,7 @@ import {
   saveIpfsCid,
   getDecryptionKey,
   createAccessRequest,
+  purchaseDocument,
   getAccessRequestsForOwner,
   resolveAccessRequest,
   getSharedDocuments,
@@ -23,6 +24,7 @@ router.get("/", authMiddleware, getMyDocuments);
 router.get("/:id/decryption-key", authMiddleware, getDecryptionKey);
 router.post("/:id/ipfs-cid", authMiddleware, saveIpfsCid);
 router.post("/:id/access-requests", authMiddleware, createAccessRequest);
+router.post("/:id/purchase", authMiddleware, purchaseDocument);
 router.get("/access-requests", authMiddleware, getAccessRequestsForOwner);
 router.get("/shared-documents", authMiddleware, getSharedDocuments);
 router.patch(

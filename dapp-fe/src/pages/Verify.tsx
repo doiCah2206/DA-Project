@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store';
 import type { NotarizedDocument, DocumentType } from '../types';
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../constants/contract';
 
 type MarketListing = NotarizedDocument & {
     price?: number;
@@ -91,6 +92,38 @@ const Verify = () => {
     const [isPurchasing, setIsPurchasing] = useState(false);
     const [purchaseSuccess, setPurchaseSuccess] = useState(false);
     const [purchaseError, setPurchaseError] = useState('');
+    const [purchasedIds, setPurchasedIds] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        const loadPurchased = async () => {
+            if (!token || !wallet.isConnected || !wallet.address) return;
+            try {
+                const res = await fetch(
+                    `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/shared-documents`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'x-wallet-address': wallet.address,
+                        },
+                    },
+                );
+                if (!res.ok) return;
+                const data = await res.json() as { documents?: Array<{ id: string }> };
+                if (!Array.isArray(data.documents)) return;
+                const map: Record<string, boolean> = {};
+                data.documents.forEach((doc) => {
+                    if (doc?.id != null) {
+                        map[String(doc.id)] = true;
+                    }
+                });
+                setPurchasedIds(map);
+            } catch {
+                // Ignore purchase preload failures
+            }
+        };
+
+        void loadPurchased();
+    }, [token, wallet.isConnected, wallet.address]);
 
     useEffect(() => {
         const load = async () => {
@@ -123,15 +156,48 @@ const Verify = () => {
             setPurchaseError('Connect your wallet to purchase documents.');
             return;
         }
+        if (selectedListing.ownerAddress.toLowerCase() === wallet.address.toLowerCase()) {
+            setPurchaseError('You are the owner of this document.');
+            return;
+        }
         if (selectedListing.price == null) {
             setPurchaseError('This listing is not priced yet.');
+            return;
+        }
+        if (!CONTRACT_ADDRESS) {
+            setPurchaseError('Missing CONTRACT_ADDRESS in dapp-fe/.env');
             return;
         }
         setIsPurchasing(true);
         setPurchaseError('');
         try {
+            const { BrowserProvider, Contract, parseEther } = await import('ethers');
+            if (!window.ethereum) throw new Error('Khong tim thay vi Web3');
+            const currentChainId = await window.ethereum.request<string>({ method: 'eth_chainId' });
+            if (currentChainId !== '0x5aff') {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x5aff' }],
+                    });
+                } catch {
+                    throw new Error('Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi mua');
+                }
+            }
+
+            const browserProvider = new BrowserProvider(window.ethereum);
+            const signer = await browserProvider.getSigner();
+            const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            const hashBytes32 = selectedListing.fileHash.startsWith('0x')
+                ? selectedListing.fileHash
+                : `0x${selectedListing.fileHash}`;
+            const tx = await contract.buyDocument(hashBytes32, {
+                value: parseEther(selectedListing.price.toString()),
+            });
+            await tx.wait();
+
             const response = await fetch(
-                `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/${selectedListing.id}/access-requests`,
+                `${import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api'}/documents/${selectedListing.id}/purchase`,
                 {
                     method: 'POST',
                     headers: {
@@ -139,13 +205,13 @@ const Verify = () => {
                         Authorization: `Bearer ${token}`,
                         'x-wallet-address': wallet.address,
                     },
-                    body: JSON.stringify({ message: 'Purchase request from marketplace.' }),
                 }
             );
             if (!response.ok) {
                 const d = await response.json().catch(() => ({})) as { message?: string };
                 throw new Error(d.message || 'Purchase failed');
             }
+            setPurchasedIds((prev) => ({ ...prev, [selectedListing.id]: true }));
             setPurchaseSuccess(true);
         } catch (err) {
             setPurchaseError(err instanceof Error ? err.message : 'Purchase failed');
@@ -166,6 +232,13 @@ const Verify = () => {
         setPurchaseSuccess(false);
         setPurchaseError('');
     };
+
+    const isPurchased = (listingId: string) => Boolean(purchasedIds[listingId]);
+    const isOwnerListing = (listing: MarketListing) => (
+        wallet.address
+            ? listing.ownerAddress.toLowerCase() === wallet.address.toLowerCase()
+            : false
+    );
 
     const filtered = listings
         .filter((l) => {
@@ -312,86 +385,96 @@ const Verify = () => {
                     </div>
                 ) : (
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {filtered.map((listing, idx) => (
-                            <div
-                                key={listing.id}
-                                className="group rounded-3xl overflow-hidden flex flex-col cursor-pointer border border-[#E3DED1] bg-white shadow-[0_10px_30px_rgba(17,20,24,0.08)] hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(17,20,24,0.12)] transition-all duration-300"
-                                style={{ animationDelay: `${idx * 0.05}s` }}
-                                onClick={() => openModal(listing)}
-                            >
-                                <div className="h-1 w-full bg-gradient-to-r from-[#0C6CF2] via-[#38BDF8] to-[#F59E0B]" />
-                                <div className="p-5 flex flex-col flex-1">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="w-11 h-11 rounded-xl bg-[#111418] text-white flex items-center justify-center text-xl">
-                                            {docTypeIcons[listing.documentType] ?? '📄'}
-                                        </div>
-                                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${docTypeColors[listing.documentType] ?? docTypeColors['Other']}`}>
-                                            {listing.documentType}
-                                        </span>
-                                    </div>
-
-                                    <h3 className="font-heading font-semibold text-[#111418] text-base leading-snug mb-1.5 group-hover:text-[#0C6CF2] transition-colors line-clamp-2">
-                                        {listing.title}
-                                    </h3>
-                                    <p className="text-[#6B6F66] text-xs leading-relaxed mb-4 line-clamp-2 flex-1">
-                                        {listing.description}
-                                    </p>
-
-                                    {listing.tags.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5 mb-4">
-                                            {listing.tags.slice(0, 3).map((tag) => (
-                                                <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F5F2EA] text-[#6B6F66] text-xs border border-[#E3DED1]">
-                                                    <Tag className="w-2.5 h-2.5" />{tag}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    <div className="flex items-center justify-between pt-3 border-t border-[#E3DED1] mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 rounded-full bg-[#0C6CF2]/15 flex items-center justify-center text-[#0C6CF2] text-xs font-bold">
-                                                {listing.ownerName.charAt(0)}
+                        {filtered.map((listing, idx) => {
+                            const alreadyPurchased = isPurchased(listing.id) || isOwnerListing(listing);
+                            return (
+                                <div
+                                    key={listing.id}
+                                    className="group rounded-3xl overflow-hidden flex flex-col cursor-pointer border border-[#E3DED1] bg-white shadow-[0_10px_30px_rgba(17,20,24,0.08)] hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(17,20,24,0.12)] transition-all duration-300"
+                                    style={{ animationDelay: `${idx * 0.05}s` }}
+                                    onClick={() => openModal(listing)}
+                                >
+                                    <div className="h-1 w-full bg-gradient-to-r from-[#0C6CF2] via-[#38BDF8] to-[#F59E0B]" />
+                                    <div className="p-5 flex flex-col flex-1">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="w-11 h-11 rounded-xl bg-[#111418] text-white flex items-center justify-center text-xl">
+                                                {docTypeIcons[listing.documentType] ?? '📄'}
                                             </div>
-                                            <span className="text-[#6B6F66] text-xs truncate max-w-[100px]">{listing.ownerName}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-                                            <span className="text-xs text-[#111418] font-medium">
-                                                {listing.seller_rating == null ? 'New' : listing.seller_rating.toFixed(1)}
+                                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${docTypeColors[listing.documentType] ?? docTypeColors['Other']}`}>
+                                                {listing.documentType}
                                             </span>
-                                            <span className="text-xs text-[#8A8F83] ml-0.5">· {listing.sales_count ?? 0} sold</span>
                                         </div>
-                                    </div>
 
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            {listing.price != null ? (
-                                                <>
-                                                    <p className="text-[#0C6CF2] font-bold text-lg leading-none">{listing.price.toFixed(3)}</p>
-                                                    <p className="text-[#6B6F66] text-xs mt-0.5">{listing.currency}</p>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <p className="text-[#6B6F66] font-semibold text-sm leading-none">Not listed</p>
-                                                    <p className="text-[#8A8F83] text-xs mt-0.5">Contact seller</p>
-                                                </>
-                                            )}
+                                        <h3 className="font-heading font-semibold text-[#111418] text-base leading-snug mb-1.5 group-hover:text-[#0C6CF2] transition-colors line-clamp-2">
+                                            {listing.title}
+                                        </h3>
+                                        <p className="text-[#6B6F66] text-xs leading-relaxed mb-4 line-clamp-2 flex-1">
+                                            {listing.description}
+                                        </p>
+
+                                        {listing.tags.length > 0 && (
+                                            <div className="flex flex-wrap gap-1.5 mb-4">
+                                                {listing.tags.slice(0, 3).map((tag) => (
+                                                    <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F5F2EA] text-[#6B6F66] text-xs border border-[#E3DED1]">
+                                                        <Tag className="w-2.5 h-2.5" />{tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between pt-3 border-t border-[#E3DED1] mb-4">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-full bg-[#0C6CF2]/15 flex items-center justify-center text-[#0C6CF2] text-xs font-bold">
+                                                    {listing.ownerName.charAt(0)}
+                                                </div>
+                                                <span className="text-[#6B6F66] text-xs truncate max-w-[100px]">{listing.ownerName}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+                                                <span className="text-xs text-[#111418] font-medium">
+                                                    {listing.seller_rating == null ? 'New' : listing.seller_rating.toFixed(1)}
+                                                </span>
+                                                <span className="text-xs text-[#8A8F83] ml-0.5">· {listing.sales_count ?? 0} sold</span>
+                                            </div>
                                         </div>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); openModal(listing); }}
-                                            disabled={listing.price == null}
-                                            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${listing.price == null
-                                                ? 'border-[#E3DED1] text-[#9AA094] bg-[#F5F2EA] cursor-not-allowed'
-                                                : 'border-[#0C6CF2] text-[#0C6CF2] bg-[#0C6CF2]/10 hover:bg-[#0C6CF2] hover:text-white'
-                                                }`}
-                                        >
-                                            <ShoppingBag className="w-3.5 h-3.5" />
-                                            Buy
-                                        </button>
+
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                {alreadyPurchased ? (
+                                                    <>
+                                                        <p className="text-[#2D8A57] font-bold text-lg leading-none">Đã mua</p>
+                                                        <p className="text-[#8A8F83] text-xs mt-0.5">Bạn đã sở hữu</p>
+                                                    </>
+                                                ) : listing.price != null ? (
+                                                    <>
+                                                        <p className="text-[#0C6CF2] font-bold text-lg leading-none">{listing.price.toFixed(3)}</p>
+                                                        <p className="text-[#6B6F66] text-xs mt-0.5">{listing.currency}</p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <p className="text-[#6B6F66] font-semibold text-sm leading-none">Not listed</p>
+                                                        <p className="text-[#8A8F83] text-xs mt-0.5">Contact seller</p>
+                                                    </>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); openModal(listing); }}
+                                                disabled={listing.price == null || alreadyPurchased}
+                                                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${listing.price == null
+                                                    ? 'border-[#E3DED1] text-[#9AA094] bg-[#F5F2EA] cursor-not-allowed'
+                                                    : alreadyPurchased
+                                                        ? 'border-[#BDE9C9] text-[#2D8A57] bg-[#E9F7EE] cursor-not-allowed'
+                                                        : 'border-[#0C6CF2] text-[#0C6CF2] bg-[#0C6CF2]/10 hover:bg-[#0C6CF2] hover:text-white'
+                                                    }`}
+                                            >
+                                                <ShoppingBag className="w-3.5 h-3.5" />
+                                                {alreadyPurchased ? 'Owned' : 'Buy'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
@@ -409,6 +492,15 @@ const Verify = () => {
                         <div className="h-1 w-full bg-gradient-to-r from-[#0C6CF2] via-[#38BDF8] to-[#F59E0B]" />
 
                         <div className="p-6">
+                            {isPurchased(selectedListing.id) || isOwnerListing(selectedListing) ? (
+                                <div className="mb-5 rounded-xl bg-[#E9F7EE] border border-[#BDE9C9] p-4 flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-[#2D8A57] flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-[#2D8A57] font-semibold text-sm">Đã sở hữu</p>
+                                        <p className="text-[#6B6F66] text-xs mt-1">Tài liệu này đã thuộc về bạn.</p>
+                                    </div>
+                                </div>
+                            ) : null}
                             <div className="flex items-start justify-between mb-5">
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-xl bg-[#111418] text-white flex items-center justify-center text-2xl flex-shrink-0">
@@ -476,32 +568,34 @@ const Verify = () => {
                                 <div className="rounded-xl bg-[#E9F7EE] border border-[#BDE9C9] p-4 flex items-start gap-3">
                                     <CheckCircle className="w-5 h-5 text-[#2D8A57] flex-shrink-0 mt-0.5" />
                                     <div>
-                                        <p className="text-[#2D8A57] font-semibold text-sm">Purchase request sent!</p>
-                                        <p className="text-[#6B6F66] text-xs mt-1">The seller will review your request. Once approved, the document will appear in <strong>Shared Documents</strong>.</p>
+                                        <p className="text-[#2D8A57] font-semibold text-sm">Đã mua</p>
+                                        <p className="text-[#6B6F66] text-xs mt-1">Bạn đã sở hữu tài liệu này.</p>
                                     </div>
                                 </div>
                             ) : (
                                 <>
-                                    <div className="flex items-center justify-between p-4 rounded-xl bg-[#F5F2EA] mb-4">
-                                        <div>
-                                            <p className="text-[#6B6F66] text-xs mb-1">Price</p>
-                                            {selectedListing.price != null ? (
-                                                <p className="text-[#0C6CF2] font-bold text-2xl leading-none">
-                                                    {selectedListing.price.toFixed(3)}
-                                                    <span className="text-base font-normal text-[#6B6F66] ml-1">{selectedListing.currency}</span>
-                                                </p>
-                                            ) : (
-                                                <p className="text-[#6B6F66] font-semibold text-sm leading-none">Not listed</p>
-                                            )}
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-[#6B6F66] text-xs mb-1">You receive</p>
-                                            <div className="flex items-center gap-1.5">
-                                                <Download className="w-4 h-4 text-[#0C6CF2]" />
-                                                <span className="text-[#111418] text-sm font-medium">Full file access</span>
+                                    {(!isPurchased(selectedListing.id) && !isOwnerListing(selectedListing)) ? (
+                                        <div className="flex items-center justify-between p-4 rounded-xl bg-[#F5F2EA] mb-4">
+                                            <div>
+                                                <p className="text-[#6B6F66] text-xs mb-1">Price</p>
+                                                {selectedListing.price != null ? (
+                                                    <p className="text-[#0C6CF2] font-bold text-2xl leading-none">
+                                                        {selectedListing.price.toFixed(3)}
+                                                        <span className="text-base font-normal text-[#6B6F66] ml-1">{selectedListing.currency}</span>
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-[#6B6F66] font-semibold text-sm leading-none">Not listed</p>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[#6B6F66] text-xs mb-1">You receive</p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <Download className="w-4 h-4 text-[#0C6CF2]" />
+                                                    <span className="text-[#111418] text-sm font-medium">Full file access</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
+                                    ) : null}
 
                                     {purchaseError && (
                                         <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
@@ -526,7 +620,7 @@ const Verify = () => {
                                         </button>
                                         <button
                                             onClick={handlePurchase}
-                                            disabled={isPurchasing || selectedListing.price == null}
+                                            disabled={isPurchasing || selectedListing.price == null || isPurchased(selectedListing.id) || isOwnerListing(selectedListing)}
                                             className="flex-1 px-4 py-2.5 rounded-xl bg-[#0C6CF2] text-white text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                                         >
                                             {isPurchasing ? (
@@ -535,7 +629,7 @@ const Verify = () => {
                                                     Processing...
                                                 </span>
                                             ) : (
-                                                'Purchase'
+                                                (isPurchased(selectedListing.id) || isOwnerListing(selectedListing)) ? 'Owned' : 'Purchase'
                                             )}
                                         </button>
                                     </div>
