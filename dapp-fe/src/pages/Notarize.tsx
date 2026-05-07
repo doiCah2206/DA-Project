@@ -23,6 +23,7 @@ import type {
     NotarizedDocument,
 } from "../types";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants/contract";
+import { parseError } from "../utils/parseError";
 
 type VersionMode = "new" | "existing";
 
@@ -386,9 +387,7 @@ const Notarize = () => {
             addDocument(newDoc);
             setMintingStatus("success");
         } catch (err: unknown) {
-            const message =
-                err instanceof Error ? err.message : "Loi khong xac dinh";
-            alert(`Mint that bai: ${message}`);
+            alert(`Mint thất bại: ${parseError(err)}`);
             setMintingStatus("idle");
             setMintingStep("");
         }

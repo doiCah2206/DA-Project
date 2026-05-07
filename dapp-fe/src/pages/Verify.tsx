@@ -23,6 +23,7 @@ import type { NotarizedDocument, DocumentType } from "../types";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants/contract";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { parseError } from "../utils/parseError";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -432,9 +433,7 @@ const Verify = () => {
             }));
             setPurchaseSuccess(true);
         } catch (err) {
-            setPurchaseError(
-                err instanceof Error ? err.message : "Purchase failed",
-            );
+            setPurchaseError(parseError(err));
         } finally {
             setIsPurchasing(false);
         }

@@ -24,6 +24,7 @@ import {
   downloadOriginalFile,
   downloadEncryptedFile,
 } from "../utils/documentDownload";
+import { parseError } from "../utils/parseError";
 import { CustomSelect } from "../components/ui";
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants/contract";
 
@@ -343,8 +344,7 @@ const Documents = () => {
       setUnlistSuccess(data.message || "Da huy dang ban thanh cong.");
       void fetchDocuments();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Khong huy dang ban duoc.";
+      const message = parseError(error);
       setUnlistError(message);
     } finally {
       setIsUnlisting(false);
@@ -403,8 +403,7 @@ const Documents = () => {
       setShareSuccess(data.message || "Da chia se thanh cong.");
       setShareWalletAddress("");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Khong chia se duoc tai lieu";
+      const message = parseError(error);
       setShareError(message);
     } finally {
       setIsSharing(false);
@@ -494,8 +493,7 @@ const Documents = () => {
       setListSuccess(data.message || "Da tao listing thanh cong.");
       void fetchDocuments();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Khong tao duoc listing.";
+      const message = parseError(error);
       setListError(message);
     } finally {
       setIsListing(false);
@@ -585,8 +583,7 @@ const Documents = () => {
       setUpdateSuccess(data.message || "Da cap nhat gia thanh cong.");
       void fetchDocuments();
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Khong cap nhat duoc gia.";
+      const message = parseError(error);
       setUpdateError(message);
     } finally {
       setIsUpdating(false);
