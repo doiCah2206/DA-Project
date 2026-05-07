@@ -5,20 +5,24 @@ contract CertificateManager {
     address private owner;
 
     struct Certificate {
-        address issuer; // Nguoi cap
-        uint256 timestamp; // Thoi gian cap
-        bool valid; // Trang thai
+        address issuer;
+        uint256 timestamp;
+        bool valid;
     }
 
-    // Public info: ai cung verify duoc
+    struct SaleInfo {
+        uint256 price;
+        bool forSale;
+        uint256 soldCount;
+    }
+
     mapping(bytes32 => Certificate) private certificates;
+    mapping(bytes32 => string) private _ipfsCid;
+    mapping(bytes32 => string) private _projectName;
+    mapping(bytes32 => string) private _description;
+    mapping(bytes32 => SaleInfo) private sales;
+    mapping(bytes32 => mapping(address => bool)) private buyers;
 
-    // ← THEM: 4 mapping private — chi issuer/owner doc duoc
-    mapping(bytes32 => string) private _ipfsCid; // CID tren IPFS/Pinata
-    mapping(bytes32 => string) private _projectName; // Ten du an / tai lieu
-    mapping(bytes32 => string) private _description; // Mo ta
-
-    // ← SUA: doi string → bytes32 de tiet kiem gas va an toan hon
     event CertificateIssued(bytes32 indexed hash, address issuer);
     event CertificateRevoked(bytes32 indexed hash);
     event AccessLogged(
@@ -26,6 +30,19 @@ contract CertificateManager {
         address verifier,
         uint256 timestamp
     );
+
+    event DocumentListedForSale(
+        bytes32 indexed hash,
+        uint256 price,
+        address seller
+    );
+    event DocumentPriceUpdated(
+        bytes32 indexed hash,
+        uint256 newPrice,
+        address seller
+    );
+    event DocumentPurchased(bytes32 indexed hash, address buyer, uint256 price);
+    event DocumentSaleCancelled(bytes32 indexed hash);
 
     constructor() {
         owner = msg.sender;
@@ -35,12 +52,10 @@ contract CertificateManager {
         return owner;
     }
 
-    // ← SUA: doi param tu string → bytes32
     function isHashExists(bytes32 hash) public view returns (bool) {
         return certificates[hash].timestamp != 0;
     }
 
-    // ← SUA: them 3 param moi: ipfsCid, projectName, description
     function issueCertificate(
         bytes32 hash,
         string calldata ipfsCid,
@@ -57,7 +72,6 @@ contract CertificateManager {
             valid: true
         });
 
-        // ← THEM: luu metadata private vao mapping rieng biet
         _ipfsCid[hash] = ipfsCid;
         _projectName[hash] = projectName;
         _description[hash] = description;
@@ -65,7 +79,6 @@ contract CertificateManager {
         emit CertificateIssued(hash, msg.sender);
     }
 
-    // Chi tra public info (issuer/timestamp/valid) — KHONG lo CID/key
     function verifyCertificate(
         bytes32 hash
     ) public returns (address issuer, uint256 timestamp, bool valid) {
@@ -75,20 +88,92 @@ contract CertificateManager {
         return (cert.issuer, cert.timestamp, cert.valid);
     }
 
-    // ← THEM: check quyen — chi issuer hoac contract owner moi doc duoc
+    function listDocumentForSale(bytes32 hash, uint256 price) public {
+        require(isHashExists(hash), "CM: Hash khong ton tai");
+        require(price > 0, "CM: Gia khong hop le");
+
+        Certificate memory cert = certificates[hash];
+        require(
+            msg.sender == cert.issuer || msg.sender == owner,
+            "CM: Khong co quyen"
+        );
+
+        SaleInfo storage sale = sales[hash];
+        sale.price = price;
+        sale.forSale = true;
+
+        emit DocumentListedForSale(hash, price, msg.sender);
+    }
+
+    function updateSalePrice(bytes32 hash, uint256 newPrice) public {
+        require(isHashExists(hash), "CM: Hash khong ton tai");
+        require(newPrice > 0, "CM: Gia khong hop le");
+
+        Certificate memory cert = certificates[hash];
+        require(
+            msg.sender == cert.issuer || msg.sender == owner,
+            "CM: Khong co quyen"
+        );
+
+        SaleInfo storage sale = sales[hash];
+        require(sale.forSale, "CM: Chua duoc ban");
+
+        sale.price = newPrice;
+        emit DocumentPriceUpdated(hash, newPrice, msg.sender);
+    }
+
+    function cancelSale(bytes32 hash) public {
+        require(isHashExists(hash), "CM: Hash khong ton tai");
+
+        Certificate memory cert = certificates[hash];
+        require(
+            msg.sender == cert.issuer || msg.sender == owner,
+            "CM: Khong co quyen"
+        );
+
+        delete sales[hash];
+        emit DocumentSaleCancelled(hash);
+    }
+
+    function buyDocument(bytes32 hash) public payable {
+        require(isHashExists(hash), "CM: Hash khong ton tai");
+
+        SaleInfo storage sale = sales[hash];
+        require(sale.forSale, "CM: Chua duoc ban");
+        require(msg.value == sale.price, "CM: Sai so tien");
+        require(
+            msg.sender != certificates[hash].issuer,
+            "CM: Nguoi cap khong the mua"
+        );
+        require(!buyers[hash][msg.sender], "CM: Da mua tai lieu");
+
+        buyers[hash][msg.sender] = true;
+        sale.soldCount += 1;
+
+        address payable seller = payable(certificates[hash].issuer);
+        (bool sent, ) = seller.call{value: msg.value}("");
+        require(sent, "CM: Chuyen tien that bai");
+
+        emit DocumentPurchased(hash, msg.sender, msg.value);
+    }
+
+    function canAccess(bytes32 hash, address user) public view returns (bool) {
+        if (!isHashExists(hash)) {
+            return false;
+        }
+
+        Certificate memory cert = certificates[hash];
+        return user == cert.issuer || user == owner || buyers[hash][user];
+    }
+
     function getCertificate(
         bytes32 hash
     ) public view returns (Certificate memory) {
         require(isHashExists(hash), "CM: Hash khong ton tai");
-        Certificate memory cert = certificates[hash];
-        require(
-            msg.sender == cert.issuer || msg.sender == owner,
-            "CM: Khong co quyen truy cap"
-        );
-        return cert;
+        require(canAccess(hash, msg.sender), "CM: Khong co quyen truy cap");
+        return certificates[hash];
     }
 
-    // ← THEM: ham moi — tra field private, chi issuer/owner doc duoc
     function getMyRecord(
         bytes32 hash
     )
@@ -104,11 +189,9 @@ contract CertificateManager {
         )
     {
         require(isHashExists(hash), "CM: Hash khong ton tai");
+        require(canAccess(hash, msg.sender), "CM: Khong co quyen truy cap");
+
         Certificate memory cert = certificates[hash];
-        require(
-            msg.sender == cert.issuer || msg.sender == owner,
-            "CM: Khong co quyen truy cap"
-        );
         return (
             cert.issuer,
             cert.timestamp,
@@ -119,7 +202,14 @@ contract CertificateManager {
         );
     }
 
-    // ← SUA: error message ngan gon hon, khop voi test
+    function getSaleInfo(
+        bytes32 hash
+    ) public view returns (uint256 price, bool forSale, uint256 soldCount) {
+        require(isHashExists(hash), "CM: Hash khong ton tai");
+        SaleInfo memory sale = sales[hash];
+        return (sale.price, sale.forSale, sale.soldCount);
+    }
+
     function revokeCertificate(bytes32 hash) public {
         require(isHashExists(hash), "CM: Hash khong ton tai");
         Certificate storage cert = certificates[hash];

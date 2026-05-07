@@ -4,14 +4,17 @@ import {
   getMyDocuments,
   verifyDocument,
   saveIpfsCid,
-  getRecordsByWallet,
-  getAccessLog,
   getDecryptionKey,
   createAccessRequest,
+  purchaseDocument,
   getAccessRequestsForOwner,
   resolveAccessRequest,
   getSharedDocuments,
   shareDocumentByWallet,
+  listForSale,
+  updateSalePrice,
+  unlistDocument,
+  getMarketplace,
 } from "../controllers/documentController";
 import { authMiddleware } from "../middleware/auth";
 
@@ -23,6 +26,7 @@ router.get("/", authMiddleware, getMyDocuments);
 router.get("/:id/decryption-key", authMiddleware, getDecryptionKey);
 router.post("/:id/ipfs-cid", authMiddleware, saveIpfsCid);
 router.post("/:id/access-requests", authMiddleware, createAccessRequest);
+router.post("/:id/purchase", authMiddleware, purchaseDocument);
 router.get("/access-requests", authMiddleware, getAccessRequestsForOwner);
 router.get("/shared-documents", authMiddleware, getSharedDocuments);
 router.patch(
@@ -31,8 +35,10 @@ router.patch(
   resolveAccessRequest,
 );
 router.post("/:id/share-by-wallet", authMiddleware, shareDocumentByWallet);
+router.post("/:id/list-for-sale", authMiddleware, listForSale);
+router.patch("/:id/update-price", authMiddleware, updateSalePrice);
+router.patch("/:id/unlist", authMiddleware, unlistDocument);
+router.get("/marketplace", getMarketplace);
 router.get("/verify/:hash", verifyDocument);
-router.get("/records", getRecordsByWallet); // public
-router.get("/access-log/:recordId", authMiddleware, getAccessLog); // cần auth
 
 export default router;

@@ -50,12 +50,9 @@ export const mintDocument = async (req: Request, res: Response) => {
     }
 
     if (!decryptionKeyPayload?.key || !decryptionKeyPayload?.iv) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Thiếu decryptionKeyPayload.key hoặc decryptionKeyPayload.iv",
-        });
+      return res.status(400).json({
+        message: "Thiếu decryptionKeyPayload.key hoặc decryptionKeyPayload.iv",
+      });
     }
 
     const normalizedOwnerAddress = String(ownerAddress ?? "").toLowerCase();
@@ -129,12 +126,10 @@ export const getDecryptionKey = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const result = await pool.query(
@@ -211,12 +206,10 @@ export const createAccessRequest = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const docResult = await pool.query(
@@ -281,6 +274,92 @@ export const createAccessRequest = async (req: Request, res: Response) => {
   }
 };
 
+// POST /api/documents/:id/purchase — tự động cấp quyền sau khi mua (không cần duyệt)
+export const purchaseDocument = async (req: Request, res: Response) => {
+  try {
+    const userId = Number((req as any).user.userId);
+    const jwtWalletAddress = String(
+      (req as any).user.wallet_address ?? "",
+    ).toLowerCase();
+    const activeWalletHeader = String(
+      req.headers["x-wallet-address"] ?? "",
+    ).toLowerCase();
+    const { id } = req.params;
+
+    if (!activeWalletHeader) {
+      return res.status(401).json({ message: "Thiếu x-wallet-address" });
+    }
+
+    if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
+    }
+
+    const docResult = await pool.query(
+      "SELECT id, user_id, owner_address, is_listed, price FROM documents WHERE id = $1",
+      [id],
+    );
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy document" });
+    }
+
+    const document = docResult.rows[0];
+    const ownerAddress = String(document.owner_address ?? "").toLowerCase();
+    const ownerUserId = Number(document.user_id);
+
+    if (
+      ownerUserId === userId ||
+      (ownerAddress && ownerAddress === activeWalletHeader)
+    ) {
+      return res.status(400).json({ message: "Bạn đang là chủ tài liệu này." });
+    }
+
+    if (!document.is_listed || !document.price) {
+      return res.status(409).json({ message: "Tài liệu chưa được đăng bán." });
+    }
+
+    const existing = await pool.query(
+      `SELECT id, status FROM document_access_requests
+             WHERE document_id = $1
+               AND requester_wallet_address = $2
+             ORDER BY created_at DESC
+             LIMIT 1`,
+      [id, activeWalletHeader],
+    );
+
+    if (existing.rows[0]?.status === "approved") {
+      return res
+        .status(409)
+        .json({ message: "Bạn đã được cấp quyền cho tài liệu này." });
+    }
+
+    const insertResult = await pool.query(
+      `INSERT INTO document_access_requests
+                (document_id, requester_user_id, requester_wallet_address, requester_name, message, status, source, resolved_at)
+             VALUES ($1, $2, $3, $4, 'Auto-approved after purchase', 'approved', 'market_purchase', NOW())
+             RETURNING *`,
+      [
+        id,
+        userId,
+        activeWalletHeader,
+        String((req as any).user.wallet_address ?? activeWalletHeader),
+      ],
+    );
+
+    return res.status(201).json({
+      message: "Đã cấp quyền sau khi mua.",
+      request: insertResult.rows[0],
+    });
+  } catch (error) {
+    console.error("Lỗi purchaseDocument:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
 // GET /api/documents/access-requests — chủ tài liệu xem danh sách yêu cầu
 export const getAccessRequestsForOwner = async (
   req: Request,
@@ -321,12 +400,10 @@ export const getSharedDocuments = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const result = await pool.query(
@@ -493,52 +570,6 @@ export const saveIpfsCid = async (req: Request, res: Response) => {
   }
 };
 
-// GET /api/documents/records?wallet=0x... — lấy records theo địa chỉ ví
-export const getRecordsByWallet = async (req: Request, res: Response) => {
-  try {
-    const { wallet } = req.query;
-    if (!wallet)
-      return res.status(400).json({ message: "Thiếu wallet address" });
-
-    const result = await pool.query(
-      "SELECT * FROM documents WHERE owner_address = $1 ORDER BY mint_date DESC",
-      [String(wallet).toLowerCase()],
-    );
-    res.json({ documents: result.rows });
-  } catch (error) {
-    console.error("Lỗi getRecordsByWallet:", error);
-    res.status(500).json({ message: "Lỗi server" });
-  }
-};
-
-// GET /api/documents/access-log/:recordId — lấy access log của 1 document
-export const getAccessLog = async (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).user.userId;
-    const { recordId } = req.params;
-
-    // Chỉ cho phép xem log của document thuộc về user đó
-    const docCheck = await pool.query(
-      "SELECT id FROM documents WHERE id = $1 AND user_id = $2",
-      [recordId, userId],
-    );
-    if (docCheck.rows.length === 0) {
-      return res.status(403).json({ message: "Không có quyền xem log này" });
-    }
-
-    const result = await pool.query(
-      `SELECT * FROM access_log 
-             WHERE document_id = $1 
-             ORDER BY accessed_at DESC`,
-      [recordId],
-    );
-    res.json({ logs: result.rows });
-  } catch (error) {
-    console.error("Lỗi getAccessLog:", error);
-    res.status(500).json({ message: "Lỗi server" });
-  }
-};
-
 // POST /api/documents/:id/share-by-wallet — chủ tài liệu chia sẻ trực tiếp theo địa chỉ ví (auto approved)
 export const shareDocumentByWallet = async (req: Request, res: Response) => {
   try {
@@ -556,12 +587,10 @@ export const shareDocumentByWallet = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const recipientWalletRaw = String(
@@ -673,5 +702,177 @@ export const shareDocumentByWallet = async (req: Request, res: Response) => {
     console.error("Lỗi shareDocumentByWallet:", error);
     const message = error instanceof Error ? error.message : "Lỗi server";
     return res.status(500).json({ message });
+  }
+};
+
+// POST /api/documents/:id/list-for-sale — chủ tài liệu đăng bán
+export const listForSale = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { id } = req.params;
+    const price = Number(req.body?.price);
+    const currency = String(req.body?.currency ?? "TEST");
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ message: "Giá không hợp lệ" });
+    }
+
+    const existing = await pool.query(
+      `SELECT is_listed FROM documents WHERE id = $1 AND user_id = $2`,
+      [id, userId],
+    );
+
+    if (existing.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    if (existing.rows[0].is_listed) {
+      return res
+        .status(409)
+        .json({ message: "Tài liệu này đã được đăng bán rồi." });
+    }
+
+    const result = await pool.query(
+      `UPDATE documents
+       SET is_listed = true, price = $1, currency = $2
+       WHERE id = $3 AND user_id = $4
+       RETURNING *`,
+      [price, currency, id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    return res.json({
+      message: "Đã đăng bán tài liệu.",
+      document: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Lỗi listForSale:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
+// PATCH /api/documents/:id/update-price — chủ tài liệu cập nhật giá đang bán
+export const updateSalePrice = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { id } = req.params;
+    const price = Number(req.body?.price);
+    const currency = req.body?.currency ? String(req.body.currency) : null;
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ message: "Giá không hợp lệ" });
+    }
+
+    const existing = await pool.query(
+      `SELECT is_listed FROM documents WHERE id = $1 AND user_id = $2`,
+      [id, userId],
+    );
+
+    if (existing.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    if (!existing.rows[0].is_listed) {
+      return res
+        .status(409)
+        .json({ message: "Tài liệu này chưa được đăng bán." });
+    }
+
+    const result = await pool.query(
+      `UPDATE documents
+       SET price = $1, currency = COALESCE($2, currency)
+       WHERE id = $3 AND user_id = $4 AND is_listed = true
+       RETURNING *`,
+      [price, currency, id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    return res.json({ message: "Đã cập nhật giá.", document: result.rows[0] });
+  } catch (error) {
+    console.error("Lỗi updateSalePrice:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
+// PATCH /api/documents/:id/unlist — chủ tài liệu hủy đăng bán
+export const unlistDocument = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { id } = req.params;
+
+    const existing = await pool.query(
+      `SELECT is_listed FROM documents WHERE id = $1 AND user_id = $2`,
+      [id, userId],
+    );
+
+    if (existing.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    if (!existing.rows[0].is_listed) {
+      return res
+        .status(409)
+        .json({ message: "Tài liệu này chưa được đăng bán." });
+    }
+
+    const result = await pool.query(
+      `UPDATE documents
+       SET is_listed = false, price = NULL
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    return res.json({ message: "Đã hủy đăng bán.", document: result.rows[0] });
+  } catch (error) {
+    console.error("Lỗi unlistDocument:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
+// GET /api/documents/marketplace — danh sách tài liệu đang bán (public)
+export const getMarketplace = async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT d.id, d.token_id, d.file_hash, d.file_name, d.file_type, d.file_size, d.title, d.document_type,
+              d.description, d.owner_name, d.owner_address, d.tags, d.transaction_hash,
+              d.ipfs_uri, d.ipfs_cid, d.mint_date, d.price, d.currency,
+              COALESCE(COUNT(dar.id) FILTER (WHERE dar.status = 'approved' AND dar.source = 'market_purchase'), 0) AS sales_count
+       FROM documents d
+       LEFT JOIN document_access_requests dar ON dar.document_id = d.id
+       WHERE d.is_listed = true AND d.price IS NOT NULL
+       GROUP BY d.id
+       ORDER BY d.mint_date DESC`,
+    );
+
+    return res.json({ listings: result.rows });
+  } catch (error) {
+    console.error("Lỗi getMarketplace:", error);
+    return res.status(500).json({ message: "Lỗi server" });
   }
 };

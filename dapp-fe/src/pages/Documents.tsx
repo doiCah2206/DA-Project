@@ -9,6 +9,9 @@ import {
   Share2,
   Eye,
   Award,
+  ShoppingBag,
+  Pencil,
+  EyeOff,
   ChevronDown,
   ChevronUp,
   GitBranch,
@@ -21,7 +24,9 @@ import {
   downloadOriginalFile,
   downloadEncryptedFile,
 } from "../utils/documentDownload";
+import { parseError } from "../utils/parseError";
 import { CustomSelect } from "../components/ui";
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants/contract";
 
 type DocumentGroup = {
   key: string;
@@ -53,6 +58,21 @@ const Documents = () => {
   const [shareTarget, setShareTarget] = useState<NotarizedDocument | null>(
     null,
   );
+  const [listTarget, setListTarget] = useState<NotarizedDocument | null>(null);
+  const [listPrice, setListPrice] = useState("");
+  const [listError, setListError] = useState<string | null>(null);
+  const [listSuccess, setListSuccess] = useState<string | null>(null);
+  const [isListing, setIsListing] = useState(false);
+  const [updateTarget, setUpdateTarget] = useState<NotarizedDocument | null>(
+    null,
+  );
+  const [updatePrice, setUpdatePrice] = useState("");
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateSuccess, setUpdateSuccess] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [unlistError, setUnlistError] = useState<string | null>(null);
+  const [unlistSuccess, setUnlistSuccess] = useState<string | null>(null);
+  const [isUnlisting, setIsUnlisting] = useState(false);
   const [shareWalletAddress, setShareWalletAddress] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [shareError, setShareError] = useState<string | null>(null);
@@ -60,10 +80,11 @@ const Documents = () => {
   const [isSharing, setIsSharing] = useState(false);
 
   const documentTypes: DocumentType[] = [
-    "Contract",
-    "Certificate",
-    "ID Document",
-    "Legal Agreement",
+    "Document",
+    "Template",
+    "Guide & Report",
+    "Creative Asset",
+    "Digital Resource",
     "Other",
   ];
 
@@ -148,11 +169,11 @@ const Documents = () => {
 
   const getTypeColor = (type: DocumentType) => {
     const colors: Record<DocumentType, string> = {
-      Contract: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-      Certificate: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-      "ID Document": "bg-green-500/20 text-green-400 border-green-500/30",
-      "Legal Agreement":
-        "bg-orange-500/20 text-orange-400 border-orange-500/30",
+      Document: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+      Template: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+      "Guide & Report": "bg-green-500/20 text-green-400 border-green-500/30",
+      "Creative Asset": "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+      "Digital Resource": "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
       Other: "bg-slate-500/20 text-slate-400 border-slate-500/30",
     };
     return colors[type];
@@ -211,6 +232,20 @@ const Documents = () => {
     setShareSuccess(null);
   };
 
+  const openListModal = (doc: NotarizedDocument) => {
+    setListTarget(doc);
+    setListPrice("");
+    setListError(null);
+    setListSuccess(null);
+  };
+
+  const openUpdateModal = (doc: NotarizedDocument) => {
+    setUpdateTarget(doc);
+    setUpdatePrice(doc.price != null ? doc.price.toString() : "");
+    setUpdateError(null);
+    setUpdateSuccess(null);
+  };
+
   const closeShareModal = () => {
     if (isSharing) return;
     setShareTarget(null);
@@ -218,6 +253,102 @@ const Documents = () => {
     setShareMessage("");
     setShareError(null);
     setShareSuccess(null);
+  };
+
+  const closeListModal = () => {
+    if (isListing) return;
+    setListTarget(null);
+    setListPrice("");
+    setListError(null);
+    setListSuccess(null);
+  };
+
+  const closeUpdateModal = () => {
+    if (isUpdating) return;
+    setUpdateTarget(null);
+    setUpdatePrice("");
+    setUpdateError(null);
+    setUpdateSuccess(null);
+  };
+
+  const handleUnlistDocument = async (doc: NotarizedDocument) => {
+    if (!token) {
+      setUnlistError("Chua xac thuc. Vui long ket noi vi lai.");
+      return;
+    }
+
+    if (!wallet.isConnected || !wallet.address) {
+      setUnlistError("Vui long ket noi vi truoc khi huy dang ban.");
+      return;
+    }
+
+    if (!CONTRACT_ADDRESS) {
+      setUnlistError("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+      return;
+    }
+
+    setIsUnlisting(true);
+    setUnlistError(null);
+    setUnlistSuccess(null);
+
+    try {
+      const { BrowserProvider, Contract } = await import("ethers");
+      if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+      const currentChainId = await window.ethereum.request<string>({
+        method: "eth_chainId",
+      });
+      if (currentChainId !== "0x5aff") {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x5aff" }],
+          });
+        } catch {
+          throw new Error(
+            "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi huy dang ban",
+          );
+        }
+      }
+
+      const browserProvider = new BrowserProvider(window.ethereum);
+      const signer = await browserProvider.getSigner();
+      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const hashBytes32 = doc.fileHash.startsWith("0x")
+        ? doc.fileHash
+        : `0x${doc.fileHash}`;
+      const tx = await contract.cancelSale(hashBytes32);
+      await tx.wait();
+
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        }/documents/${doc.id}/unlist`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "x-wallet-address": wallet.address,
+          },
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({} as { message?: string }));
+
+      if (!response.ok) {
+        throw new Error(data.message || "Khong huy dang ban duoc.");
+      }
+
+      setUnlistSuccess(data.message || "Da huy dang ban thanh cong.");
+      void fetchDocuments();
+    } catch (error) {
+      const message = parseError(error);
+      setUnlistError(message);
+    } finally {
+      setIsUnlisting(false);
+    }
   };
 
   const handleShareByWallet = async () => {
@@ -245,7 +376,8 @@ const Documents = () => {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        `${
+          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
         }/documents/${shareTarget.id}/share-by-wallet`,
         {
           method: "POST",
@@ -271,19 +403,201 @@ const Documents = () => {
       setShareSuccess(data.message || "Da chia se thanh cong.");
       setShareWalletAddress("");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Khong chia se duoc tai lieu";
+      const message = parseError(error);
       setShareError(message);
     } finally {
       setIsSharing(false);
     }
   };
 
+  const handleListForSale = async () => {
+    if (!listTarget) return;
+
+    if (!token) {
+      setListError("Chua xac thuc. Vui long ket noi vi lai.");
+      return;
+    }
+
+    if (!wallet.isConnected || !wallet.address) {
+      setListError("Vui long ket noi vi truoc khi ban tai lieu.");
+      return;
+    }
+
+    if (!CONTRACT_ADDRESS) {
+      setListError("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+      return;
+    }
+
+    const priceValue = Number(listPrice);
+    if (!Number.isFinite(priceValue) || priceValue <= 0) {
+      setListError("Gia ban khong hop le.");
+      return;
+    }
+
+    setIsListing(true);
+    setListError(null);
+    setListSuccess(null);
+
+    try {
+      const { BrowserProvider, Contract, parseEther } = await import("ethers");
+      if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+      const currentChainId = await window.ethereum.request<string>({
+        method: "eth_chainId",
+      });
+      if (currentChainId !== "0x5aff") {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x5aff" }],
+          });
+        } catch {
+          throw new Error(
+            "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi ban",
+          );
+        }
+      }
+
+      const browserProvider = new BrowserProvider(window.ethereum);
+      const signer = await browserProvider.getSigner();
+      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const hashBytes32 = listTarget.fileHash.startsWith("0x")
+        ? listTarget.fileHash
+        : `0x${listTarget.fileHash}`;
+      const weiPrice = parseEther(priceValue.toString());
+      const tx = await contract.listDocumentForSale(hashBytes32, weiPrice);
+      await tx.wait();
+
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        }/documents/${listTarget.id}/list-for-sale`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "x-wallet-address": wallet.address,
+          },
+          body: JSON.stringify({ price: priceValue }),
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({} as { message?: string }));
+
+      if (!response.ok) {
+        throw new Error(data.message || "Khong tao duoc listing.");
+      }
+
+      setListSuccess(data.message || "Da tao listing thanh cong.");
+      void fetchDocuments();
+    } catch (error) {
+      const message = parseError(error);
+      setListError(message);
+    } finally {
+      setIsListing(false);
+    }
+  };
+
+  const handleUpdatePrice = async () => {
+    if (!updateTarget) return;
+
+    if (!token) {
+      setUpdateError("Chua xac thuc. Vui long ket noi vi lai.");
+      return;
+    }
+
+    if (!wallet.isConnected || !wallet.address) {
+      setUpdateError("Vui long ket noi vi truoc khi cap nhat gia.");
+      return;
+    }
+
+    if (!CONTRACT_ADDRESS) {
+      setUpdateError("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+      return;
+    }
+
+    const priceValue = Number(updatePrice);
+    if (!Number.isFinite(priceValue) || priceValue <= 0) {
+      setUpdateError("Gia ban khong hop le.");
+      return;
+    }
+
+    setIsUpdating(true);
+    setUpdateError(null);
+    setUpdateSuccess(null);
+
+    try {
+      const { BrowserProvider, Contract, parseEther } = await import("ethers");
+      if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+      const currentChainId = await window.ethereum.request<string>({
+        method: "eth_chainId",
+      });
+      if (currentChainId !== "0x5aff") {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x5aff" }],
+          });
+        } catch {
+          throw new Error(
+            "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi cap nhat gia",
+          );
+        }
+      }
+
+      const browserProvider = new BrowserProvider(window.ethereum);
+      const signer = await browserProvider.getSigner();
+      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const hashBytes32 = updateTarget.fileHash.startsWith("0x")
+        ? updateTarget.fileHash
+        : `0x${updateTarget.fileHash}`;
+      const weiPrice = parseEther(priceValue.toString());
+      const tx = await contract.updateSalePrice(hashBytes32, weiPrice);
+      await tx.wait();
+
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        }/documents/${updateTarget.id}/update-price`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "x-wallet-address": wallet.address,
+          },
+          body: JSON.stringify({ price: priceValue }),
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({} as { message?: string }));
+
+      if (!response.ok) {
+        throw new Error(data.message || "Khong cap nhat duoc gia.");
+      }
+
+      setUpdateSuccess(data.message || "Da cap nhat gia thanh cong.");
+      void fetchDocuments();
+    } catch (error) {
+      const message = parseError(error);
+      setUpdateError(message);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+    <div
+      className="min-h-screen py-12 px-4 sm:px-6 lg:px-8"
+      style={{ fontFamily: "'DM Sans', sans-serif" }}
+    >
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="font-heading text-3xl font-bold text-white mb-2">
+          <h1 className="font-heading text-3xl font-bold text-gray-900 mb-2">
             My Documents
           </h1>
           <p className="text-slate-400">
@@ -308,6 +622,39 @@ const Documents = () => {
           </div>
         )}
 
+        {unlistError && (
+          <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 animate-slide-up">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-red-400 font-medium">Unlist Error</p>
+              <p className="text-red-300 text-sm mt-1">{unlistError}</p>
+            </div>
+            <button
+              onClick={() => setUnlistError(null)}
+              className="text-red-400 hover:text-red-300 transition-colors ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {unlistSuccess && (
+          <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-notary-success/10 border border-notary-success/30 animate-slide-up">
+            <div className="flex-1">
+              <p className="text-notary-success font-medium">Unlisted</p>
+              <p className="text-notary-success/80 text-sm mt-1">
+                {unlistSuccess}
+              </p>
+            </div>
+            <button
+              onClick={() => setUnlistSuccess(null)}
+              className="text-notary-success hover:text-notary-success/80 transition-colors ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
@@ -326,7 +673,10 @@ const Documents = () => {
               onChange={(value) => setFilterType(value as DocumentType | "All")}
               options={[
                 { label: "All Types", value: "All" },
-                ...documentTypes.map((type) => ({ label: type, value: type })),
+                ...documentTypes.map((type) => ({
+                  label: type,
+                  value: type,
+                })),
               ]}
               icon={<Filter className="w-5 h-5 text-slate-400" />}
               className="w-full sm:w-48"
@@ -360,7 +710,9 @@ const Documents = () => {
                 <div
                   key={group.key}
                   className="group notary-card rounded-2xl p-6 transition-all duration-300 animate-fade-in"
-                  style={{ animationDelay: `${index * 0.05}s` }}
+                  style={{
+                    animationDelay: `${index * 0.05}s`,
+                  }}
                 >
                   <button
                     onClick={() => toggleGroup(group.key)}
@@ -372,7 +724,7 @@ const Documents = () => {
                           {getFileIcon(latest.fileType)}
                         </div>
                         <div>
-                          <h3 className="font-heading font-semibold text-white truncate max-w-[320px]">
+                          <h3 className="font-heading font-semibold text-gray-900 truncate max-w-[320px]">
                             {latest.title}
                           </h3>
                           <div className="flex items-center gap-2 mt-1">
@@ -406,7 +758,7 @@ const Documents = () => {
                       </div>
                     </div>
 
-                    <div className="mb-4 p-3 rounded-lg bg-notary-dark">
+                    <div className="mb-4 p-3 rounded-lg bg-[#E8E4DC]">
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500 text-xs flex items-center">
                           <Hash className="w-3 h-3 mr-1" />
@@ -434,11 +786,11 @@ const Documents = () => {
                       {group.versions.map((version, idx) => (
                         <div
                           key={version.id}
-                          className="rounded-xl bg-notary-dark-secondary/50 border border-notary-slate-dark/40 p-4"
+                          className="rounded-xl bg-white border border-[#CCCCCC] p-4"
                         >
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div>
-                              <p className="text-white font-medium">
+                              <p className="text-gray-900 font-medium">
                                 Version V{group.versions.length - idx} • Token #
                                 {version.tokenId}
                               </p>
@@ -469,6 +821,43 @@ const Documents = () => {
                               >
                                 <Share2 className="w-4 h-4" />
                               </button> */}
+                              <button
+                                onClick={() => openListModal(version)}
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
+                                title="List for Sale"
+                              >
+                                <ShoppingBag className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => openUpdateModal(version)}
+                                disabled={!version.isListed}
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                title={
+                                  version.isListed
+                                    ? "Update Price"
+                                    : "Not listed"
+                                }
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  void handleUnlistDocument(version);
+                                }}
+                                disabled={!version.isListed || isUnlisting}
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                title={
+                                  version.isListed
+                                    ? "Unlist"
+                                    : "Not listed"
+                                }
+                              >
+                                {isUnlisting ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <EyeOff className="w-4 h-4" />
+                                )}
+                              </button>
                               <button
                                 onClick={() => openShareModal(version)}
                                 className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
@@ -505,7 +894,7 @@ const Documents = () => {
             <div className="w-24 h-24 rounded-full bg-notary-dark-secondary flex items-center justify-center mx-auto mb-6">
               <FileText className="w-12 h-12 text-slate-600" />
             </div>
-            <h3 className="font-heading text-xl font-semibold text-white mb-2">
+            <h3 className="font-heading text-xl font-semibold text-gray-900 mb-2">
               No Documents Found
             </h3>
             <p className="text-slate-500 mb-6">
@@ -523,12 +912,12 @@ const Documents = () => {
           onClick={closeShareModal}
         >
           <div
-            className="w-full max-w-lg rounded-2xl border border-notary-slate-dark bg-notary-dark-secondary p-6"
+            className="w-full max-w-lg rounded-2xl border border-[#CCCCCC] bg-white p-6"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
-                <h3 className="font-heading text-xl font-semibold text-white">
+                <h3 className="font-heading text-xl font-semibold text-gray-900">
                   Share Document By Wallet
                 </h3>
                 <p className="text-slate-400 text-sm mt-1">
@@ -603,6 +992,168 @@ const Documents = () => {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : null}
                   Share Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {listTarget ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={closeListModal}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-notary-slate-dark bg-notary-dark-secondary p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-heading text-xl font-semibold text-gray-900">
+                  List Document for Sale
+                </h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  {listTarget.title}
+                </p>
+              </div>
+              <button
+                onClick={closeListModal}
+                className="text-slate-500 hover:text-white transition-colors"
+                disabled={isListing}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-slate-300 text-sm mb-2">
+                  Price (TEST)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={listPrice}
+                  onChange={(event) => setListPrice(event.target.value)}
+                  placeholder="0.025"
+                  className="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all text-sm"
+                />
+              </div>
+
+              {listError ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-300 text-sm">
+                  {listError}
+                </div>
+              ) : null}
+
+              {listSuccess ? (
+                <div className="rounded-xl border border-notary-success/30 bg-notary-success/10 px-3 py-2 text-notary-success text-sm">
+                  {listSuccess}
+                </div>
+              ) : null}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={closeListModal}
+                  disabled={isListing}
+                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-300 hover:text-white hover:border-slate-500 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    void handleListForSale();
+                  }}
+                  disabled={isListing}
+                  className="px-4 py-2 rounded-xl bg-notary-cyan text-notary-dark font-semibold hover:bg-notary-cyan-dim transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {isListing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : null}
+                  List Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {updateTarget ? (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4"
+          onClick={closeUpdateModal}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border border-notary-slate-dark bg-notary-dark-secondary p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-heading text-xl font-semibold text-gray-900">
+                  Update Listing Price
+                </h3>
+                <p className="text-slate-400 text-sm mt-1">
+                  {updateTarget.title}
+                </p>
+              </div>
+              <button
+                onClick={closeUpdateModal}
+                className="text-slate-500 hover:text-white transition-colors"
+                disabled={isUpdating}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-slate-300 text-sm mb-2">
+                  New Price (TEST)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={updatePrice}
+                  onChange={(event) => setUpdatePrice(event.target.value)}
+                  placeholder="0.025"
+                  className="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all text-sm"
+                />
+              </div>
+
+              {updateError ? (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-red-300 text-sm">
+                  {updateError}
+                </div>
+              ) : null}
+
+              {updateSuccess ? (
+                <div className="rounded-xl border border-notary-success/30 bg-notary-success/10 px-3 py-2 text-notary-success text-sm">
+                  {updateSuccess}
+                </div>
+              ) : null}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={closeUpdateModal}
+                  disabled={isUpdating}
+                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-300 hover:text-white hover:border-slate-500 transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    void handleUpdatePrice();
+                  }}
+                  disabled={isUpdating}
+                  className="px-4 py-2 rounded-xl bg-notary-cyan text-notary-dark font-semibold hover:bg-notary-cyan-dim transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                >
+                  {isUpdating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : null}
+                  Update Price
                 </button>
               </div>
             </div>

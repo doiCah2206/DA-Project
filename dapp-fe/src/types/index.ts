@@ -1,8 +1,9 @@
 export type DocumentType =
-    | 'Contract'
-    | 'Certificate'
-    | 'ID Document'
-    | 'Legal Agreement'
+    | 'Document'
+    | 'Template'
+    | 'Guide & Report'
+    | 'Creative Asset'
+    | 'Digital Resource'
     | 'Other';
 
 export interface NotarizedDocument {
@@ -22,6 +23,9 @@ export interface NotarizedDocument {
     transactionHash: string;
     ipfsUri: string;
     ipfsCid?: string;
+    price?: number;
+    isListed?: boolean;
+    currency?: string;
 }
 
 export interface WalletState {

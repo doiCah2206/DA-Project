@@ -36,7 +36,7 @@ export const CustomSelect = ({
         <div ref={containerRef} className="relative">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`appearance-none w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all flex items-center justify-between ${className}`}
+                className={`appearance-none w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all flex items-center justify-between ${className}`}
             >
                 <span>{selectedLabel}</span>
                 <div className="pointer-events-none">
@@ -62,8 +62,8 @@ export const CustomSelect = ({
                                 setIsOpen(false);
                             }}
                             className={`w-full text-left px-4 py-3 transition-colors first:rounded-t-xl last:rounded-b-xl ${value === option.value
-                                    ? 'bg-notary-cyan/20 text-notary-cyan'
-                                    : 'text-white hover:bg-notary-cyan/10'
+                                ? 'bg-notary-cyan/20 text-notary-cyan'
+                                : 'text-slate-600 hover:bg-notary-cyan/10'
                                 }`}
                         >
                             {option.label}

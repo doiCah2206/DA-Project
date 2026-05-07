@@ -18,7 +18,7 @@ function App() {
           <Route path="/documents" element={<Documents />} />
           <Route path="/shared-documents" element={<SharedDocuments />} />
           <Route path="/access-requests" element={<AccessRequests />} />
-          <Route path="/verify" element={<Verify />} />
+          <Route path="/market" element={<Verify />} />
         </Routes>
       </Layout>
       <NFTDetailModal />
