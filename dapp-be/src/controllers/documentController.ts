@@ -50,12 +50,9 @@ export const mintDocument = async (req: Request, res: Response) => {
     }
 
     if (!decryptionKeyPayload?.key || !decryptionKeyPayload?.iv) {
-      return res
-        .status(400)
-        .json({
-          message:
-            "Thiếu decryptionKeyPayload.key hoặc decryptionKeyPayload.iv",
-        });
+      return res.status(400).json({
+        message: "Thiếu decryptionKeyPayload.key hoặc decryptionKeyPayload.iv",
+      });
     }
 
     const normalizedOwnerAddress = String(ownerAddress ?? "").toLowerCase();
@@ -129,12 +126,10 @@ export const getDecryptionKey = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const result = await pool.query(
@@ -211,12 +206,10 @@ export const createAccessRequest = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const docResult = await pool.query(
@@ -298,12 +291,10 @@ export const purchaseDocument = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const docResult = await pool.query(
@@ -319,7 +310,10 @@ export const purchaseDocument = async (req: Request, res: Response) => {
     const ownerAddress = String(document.owner_address ?? "").toLowerCase();
     const ownerUserId = Number(document.user_id);
 
-    if (ownerUserId === userId || (ownerAddress && ownerAddress === activeWalletHeader)) {
+    if (
+      ownerUserId === userId ||
+      (ownerAddress && ownerAddress === activeWalletHeader)
+    ) {
       return res.status(400).json({ message: "Bạn đang là chủ tài liệu này." });
     }
 
@@ -406,12 +400,10 @@ export const getSharedDocuments = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const result = await pool.query(
@@ -595,12 +587,10 @@ export const shareDocumentByWallet = async (req: Request, res: Response) => {
     }
 
     if (jwtWalletAddress && activeWalletHeader !== jwtWalletAddress) {
-      return res
-        .status(401)
-        .json({
-          message:
-            "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
-        });
+      return res.status(401).json({
+        message:
+          "Ví đang active không khớp phiên đăng nhập. Vui lòng kết nối lại ví.",
+      });
     }
 
     const recipientWalletRaw = String(
@@ -729,15 +719,19 @@ export const listForSale = async (req: Request, res: Response) => {
 
     const existing = await pool.query(
       `SELECT is_listed FROM documents WHERE id = $1 AND user_id = $2`,
-      [id, userId]
+      [id, userId],
     );
 
     if (existing.rows.length === 0) {
-      return res.status(404).json({ message: "Không tìm thấy document hoặc không có quyền" });
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
     }
 
     if (existing.rows[0].is_listed) {
-      return res.status(409).json({ message: "Tài liệu này đã được đăng bán rồi." });
+      return res
+        .status(409)
+        .json({ message: "Tài liệu này đã được đăng bán rồi." });
     }
 
     const result = await pool.query(
@@ -745,16 +739,72 @@ export const listForSale = async (req: Request, res: Response) => {
        SET is_listed = true, price = $1, currency = $2
        WHERE id = $3 AND user_id = $4
        RETURNING *`,
-      [price, currency, id, userId]
+      [price, currency, id, userId],
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Không tìm thấy document hoặc không có quyền" });
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
     }
 
-    return res.json({ message: "Đã đăng bán tài liệu.", document: result.rows[0] });
+    return res.json({
+      message: "Đã đăng bán tài liệu.",
+      document: result.rows[0],
+    });
   } catch (error) {
     console.error("Lỗi listForSale:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
+// PATCH /api/documents/:id/update-price — chủ tài liệu cập nhật giá đang bán
+export const updateSalePrice = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { id } = req.params;
+    const price = Number(req.body?.price);
+    const currency = req.body?.currency ? String(req.body.currency) : null;
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ message: "Giá không hợp lệ" });
+    }
+
+    const existing = await pool.query(
+      `SELECT is_listed FROM documents WHERE id = $1 AND user_id = $2`,
+      [id, userId],
+    );
+
+    if (existing.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    if (!existing.rows[0].is_listed) {
+      return res
+        .status(409)
+        .json({ message: "Tài liệu này chưa được đăng bán." });
+    }
+
+    const result = await pool.query(
+      `UPDATE documents
+       SET price = $1, currency = COALESCE($2, currency)
+       WHERE id = $3 AND user_id = $4 AND is_listed = true
+       RETURNING *`,
+      [price, currency, id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    return res.json({ message: "Đã cập nhật giá.", document: result.rows[0] });
+  } catch (error) {
+    console.error("Lỗi updateSalePrice:", error);
     const message = error instanceof Error ? error.message : "Lỗi server";
     return res.status(500).json({ message });
   }
@@ -772,7 +822,7 @@ export const getMarketplace = async (req: Request, res: Response) => {
        LEFT JOIN document_access_requests dar ON dar.document_id = d.id
        WHERE d.is_listed = true AND d.price IS NOT NULL
        GROUP BY d.id
-       ORDER BY d.mint_date DESC`
+       ORDER BY d.mint_date DESC`,
     );
 
     return res.json({ listings: result.rows });

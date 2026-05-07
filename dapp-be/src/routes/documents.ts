@@ -12,6 +12,7 @@ import {
   getSharedDocuments,
   shareDocumentByWallet,
   listForSale,
+  updateSalePrice,
   getMarketplace,
 } from "../controllers/documentController";
 import { authMiddleware } from "../middleware/auth";
@@ -34,6 +35,7 @@ router.patch(
 );
 router.post("/:id/share-by-wallet", authMiddleware, shareDocumentByWallet);
 router.post("/:id/list-for-sale", authMiddleware, listForSale);
+router.patch("/:id/update-price", authMiddleware, updateSalePrice);
 router.get("/marketplace", getMarketplace);
 router.get("/verify/:hash", verifyDocument);
 
