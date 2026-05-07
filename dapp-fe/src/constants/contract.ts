@@ -10,6 +10,7 @@ export const CONTRACT_ABI = [
   "function issueCertificate(bytes32 hash, string calldata ipfsCid, string calldata projectName, string calldata description)",
   "function listDocumentForSale(bytes32 hash, uint256 price)",
   "function updateSalePrice(bytes32 hash, uint256 newPrice)",
+  "function cancelSale(bytes32 hash)",
   "function buyDocument(bytes32 hash) payable",
   "function getSaleInfo(bytes32 hash) view returns (uint256 price, bool forSale, uint256 soldCount)",
   "function getMyRecord(bytes32 hash) view returns (address issuer, uint256 timestamp, bool valid, string ipfsCid, string projectName, string description)",

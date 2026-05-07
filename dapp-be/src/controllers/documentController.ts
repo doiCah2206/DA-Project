@@ -810,6 +810,51 @@ export const updateSalePrice = async (req: Request, res: Response) => {
   }
 };
 
+// PATCH /api/documents/:id/unlist — chủ tài liệu hủy đăng bán
+export const unlistDocument = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { id } = req.params;
+
+    const existing = await pool.query(
+      `SELECT is_listed FROM documents WHERE id = $1 AND user_id = $2`,
+      [id, userId],
+    );
+
+    if (existing.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    if (!existing.rows[0].is_listed) {
+      return res
+        .status(409)
+        .json({ message: "Tài liệu này chưa được đăng bán." });
+    }
+
+    const result = await pool.query(
+      `UPDATE documents
+       SET is_listed = false, price = NULL
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [id, userId],
+    );
+
+    if (result.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Không tìm thấy document hoặc không có quyền" });
+    }
+
+    return res.json({ message: "Đã hủy đăng bán.", document: result.rows[0] });
+  } catch (error) {
+    console.error("Lỗi unlistDocument:", error);
+    const message = error instanceof Error ? error.message : "Lỗi server";
+    return res.status(500).json({ message });
+  }
+};
+
 // GET /api/documents/marketplace — danh sách tài liệu đang bán (public)
 export const getMarketplace = async (req: Request, res: Response) => {
   try {

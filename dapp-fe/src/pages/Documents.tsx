@@ -11,6 +11,7 @@ import {
   Award,
   ShoppingBag,
   Pencil,
+  EyeOff,
   ChevronDown,
   ChevronUp,
   GitBranch,
@@ -68,6 +69,9 @@ const Documents = () => {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updateSuccess, setUpdateSuccess] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [unlistError, setUnlistError] = useState<string | null>(null);
+  const [unlistSuccess, setUnlistSuccess] = useState<string | null>(null);
+  const [isUnlisting, setIsUnlisting] = useState(false);
   const [shareWalletAddress, setShareWalletAddress] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [shareError, setShareError] = useState<string | null>(null);
@@ -264,6 +268,87 @@ const Documents = () => {
     setUpdatePrice("");
     setUpdateError(null);
     setUpdateSuccess(null);
+  };
+
+  const handleUnlistDocument = async (doc: NotarizedDocument) => {
+    if (!token) {
+      setUnlistError("Chua xac thuc. Vui long ket noi vi lai.");
+      return;
+    }
+
+    if (!wallet.isConnected || !wallet.address) {
+      setUnlistError("Vui long ket noi vi truoc khi huy dang ban.");
+      return;
+    }
+
+    if (!CONTRACT_ADDRESS) {
+      setUnlistError("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+      return;
+    }
+
+    setIsUnlisting(true);
+    setUnlistError(null);
+    setUnlistSuccess(null);
+
+    try {
+      const { BrowserProvider, Contract } = await import("ethers");
+      if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+      const currentChainId = await window.ethereum.request<string>({
+        method: "eth_chainId",
+      });
+      if (currentChainId !== "0x5aff") {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: "0x5aff" }],
+          });
+        } catch {
+          throw new Error(
+            "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi huy dang ban",
+          );
+        }
+      }
+
+      const browserProvider = new BrowserProvider(window.ethereum);
+      const signer = await browserProvider.getSigner();
+      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const hashBytes32 = doc.fileHash.startsWith("0x")
+        ? doc.fileHash
+        : `0x${doc.fileHash}`;
+      const tx = await contract.cancelSale(hashBytes32);
+      await tx.wait();
+
+      const response = await fetch(
+        `${
+          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        }/documents/${doc.id}/unlist`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "x-wallet-address": wallet.address,
+          },
+        },
+      );
+
+      const data = await response
+        .json()
+        .catch(() => ({} as { message?: string }));
+
+      if (!response.ok) {
+        throw new Error(data.message || "Khong huy dang ban duoc.");
+      }
+
+      setUnlistSuccess(data.message || "Da huy dang ban thanh cong.");
+      void fetchDocuments();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Khong huy dang ban duoc.";
+      setUnlistError(message);
+    } finally {
+      setIsUnlisting(false);
+    }
   };
 
   const handleShareByWallet = async () => {
@@ -540,6 +625,39 @@ const Documents = () => {
           </div>
         )}
 
+        {unlistError && (
+          <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 animate-slide-up">
+            <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-red-400 font-medium">Unlist Error</p>
+              <p className="text-red-300 text-sm mt-1">{unlistError}</p>
+            </div>
+            <button
+              onClick={() => setUnlistError(null)}
+              className="text-red-400 hover:text-red-300 transition-colors ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {unlistSuccess && (
+          <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-notary-success/10 border border-notary-success/30 animate-slide-up">
+            <div className="flex-1">
+              <p className="text-notary-success font-medium">Unlisted</p>
+              <p className="text-notary-success/80 text-sm mt-1">
+                {unlistSuccess}
+              </p>
+            </div>
+            <button
+              onClick={() => setUnlistSuccess(null)}
+              className="text-notary-success hover:text-notary-success/80 transition-colors ml-2"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
@@ -724,6 +842,24 @@ const Documents = () => {
                                 }
                               >
                                 <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  void handleUnlistDocument(version);
+                                }}
+                                disabled={!version.isListed || isUnlisting}
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                title={
+                                  version.isListed
+                                    ? "Unlist"
+                                    : "Not listed"
+                                }
+                              >
+                                {isUnlisting ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <EyeOff className="w-4 h-4" />
+                                )}
                               </button>
                               <button
                                 onClick={() => openShareModal(version)}
