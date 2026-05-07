@@ -100,8 +100,8 @@ const Notarize = () => {
     const duplicateTitleExists =
         versionMode === "new" && normalizedTitle.length > 0
             ? documents.some(
-                  (doc) => doc.title.trim().toLowerCase() === normalizedTitle,
-              )
+                (doc) => doc.title.trim().toLowerCase() === normalizedTitle,
+            )
             : false;
     const duplicateFileExists = Boolean(
         formData.fileHash &&
@@ -109,9 +109,9 @@ const Notarize = () => {
         documents.some(
             (doc) =>
                 doc.fileHash.trim().toLowerCase() ===
-                    formData.fileHash.trim().toLowerCase() &&
+                formData.fileHash.trim().toLowerCase() &&
                 doc.ownerAddress.trim().toLowerCase() ===
-                    normalizedWalletAddress,
+                normalizedWalletAddress,
         ),
     );
 
@@ -146,9 +146,9 @@ const Notarize = () => {
         onDrop,
         multiple: false,
         maxFiles: 1,
-        onDragEnter: () => {},
-        onDragOver: () => {},
-        onDragLeave: () => {},
+        onDragEnter: () => { },
+        onDragOver: () => { },
+        onDragLeave: () => { },
     });
 
     const dropzoneInputProps = getInputProps();
@@ -352,7 +352,7 @@ const Notarize = () => {
             if (!mintRes.ok)
                 throw new Error(
                     mintData.message ||
-                        `Luu metadata that bai (${mintRes.status})`,
+                    `Luu metadata that bai (${mintRes.status})`,
                 );
 
             await fetch(`${API}/documents/${mintData.document.id}/ipfs-cid`, {
@@ -407,11 +407,10 @@ const Notarize = () => {
             {[1, 2, 3, 4].map((s, index) => (
                 <div key={s} className="flex items-center">
                     <div
-                        className={`flex items-center justify-center w-10 h-10 rounded-full border-2 font-heading font-bold transition-all ${
-                            step >= s
-                                ? "bg-notary-cyan border-notary-cyan text-notary-dark"
-                                : "border-slate-600 text-slate-500"
-                        }`}
+                        className={`flex items-center justify-center w-10 h-10 rounded-full border-2 font-heading font-bold transition-all ${step >= s
+                            ? "bg-notary-cyan border-notary-cyan text-notary-dark"
+                            : "border-slate-600 text-slate-500"
+                            }`}
                     >
                         {step > s ? <Check className="w-5 h-5" /> : s}
                     </div>
@@ -442,11 +441,10 @@ const Notarize = () => {
                         setVersionMode("new");
                         setSelectedBaseDocumentId(null);
                     }}
-                    className={`text-left p-5 rounded-2xl border transition-all ${
-                        versionMode === "new"
-                            ? "border-notary-cyan bg-notary-cyan/10"
-                            : "border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40"
-                    }`}
+                    className={`text-left p-5 rounded-2xl border transition-all ${versionMode === "new"
+                        ? "border-notary-cyan bg-notary-cyan/10"
+                        : "border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40"
+                        }`}
                 >
                     <div className="flex items-center mb-3">
                         <FileText className="w-5 h-5 mr-2 text-notary-cyan" />
@@ -462,11 +460,10 @@ const Notarize = () => {
 
                 <button
                     onClick={() => setVersionMode("existing")}
-                    className={`text-left p-5 rounded-2xl border transition-all ${
-                        versionMode === "existing"
-                            ? "border-notary-cyan bg-notary-cyan/10"
-                            : "border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40"
-                    }`}
+                    className={`text-left p-5 rounded-2xl border transition-all ${versionMode === "existing"
+                        ? "border-notary-cyan bg-notary-cyan/10"
+                        : "border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40"
+                        }`}
                 >
                     <div className="flex items-center mb-3">
                         <GitBranch className="w-5 h-5 mr-2 text-notary-cyan" />
@@ -499,11 +496,10 @@ const Notarize = () => {
                                     onClick={() =>
                                         handleSelectBaseDocument(latest)
                                     }
-                                    className={`w-full text-left p-4 rounded-xl border transition-all ${
-                                        selectedBaseDocumentId === latest.id
-                                            ? "border-notary-cyan bg-notary-cyan/10"
-                                            : "border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40"
-                                    }`}
+                                    className={`w-full text-left p-4 rounded-xl border transition-all ${selectedBaseDocumentId === latest.id
+                                        ? "border-notary-cyan bg-notary-cyan/10"
+                                        : "border-notary-slate-dark bg-notary-dark-secondary/40 hover:border-notary-cyan/40"
+                                        }`}
                                 >
                                     <div className="flex items-center justify-between mb-1">
                                         <span className="text-gray-900 font-medium">
@@ -542,11 +538,10 @@ const Notarize = () => {
             {!formData.file ? (
                 <div
                     {...getRootProps()}
-                    className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${
-                        isDragActive
-                            ? "border-notary-cyan bg-notary-cyan/5"
-                            : "border-slate-700 hover:border-notary-cyan/50 hover:bg-notary-dark-secondary/50"
-                    }`}
+                    className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${isDragActive
+                        ? "border-notary-cyan bg-notary-cyan/5"
+                        : "border-slate-700 hover:border-notary-cyan/50 hover:bg-notary-dark-secondary/50"
+                        }`}
                 >
                     <input {...dropzoneInputProps} />
                     <div className="w-20 h-20 rounded-full bg-notary-cyan/10 flex items-center justify-center mx-auto mb-6">
@@ -680,7 +675,7 @@ const Notarize = () => {
                                 documentType: e.target.value as DocumentType,
                             }))
                         }
-                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     >
                         {documentTypes.map((type) => (
                             <option key={type} value={type}>
@@ -972,11 +967,10 @@ const Notarize = () => {
                                 step > 1 && setStep((step - 1) as NotarizeStep)
                             }
                             disabled={step === 1}
-                            className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-semibold transition-all ${
-                                step === 1
-                                    ? "text-slate-600 cursor-not-allowed"
-                                    : "text-white hover:bg-notary-dark-secondary"
-                            }`}
+                            className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-semibold transition-all ${step === 1
+                                ? "text-slate-600 cursor-not-allowed"
+                                : "text-gray-600 hover:bg-notary-dark-secondary"
+                                }`}
                         >
                             <ChevronLeft className="w-5 h-5" />
                             <span>Back</span>
@@ -987,11 +981,10 @@ const Notarize = () => {
                                 step < 4 && setStep((step + 1) as NotarizeStep)
                             }
                             disabled={!canProceed() || step === 4}
-                            className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-semibold transition-all ${
-                                !canProceed() || step === 4
-                                    ? "bg-slate-700 text-slate-500 cursor-not-allowed"
-                                    : "bg-notary-cyan text-notary-dark hover:bg-notary-cyan-dim glow-cyan-hover"
-                            }`}
+                            className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-semibold transition-all ${!canProceed() || step === 4
+                                ? "bg-slate-700 text-slate-300 cursor-not-allowed"
+                                : "bg-notary-cyan text-notary-dark hover:bg-notary-cyan-dim glow-cyan-hover"
+                                }`}
                         >
                             <span>Next</span>
                             <ChevronRight className="w-5 h-5" />
