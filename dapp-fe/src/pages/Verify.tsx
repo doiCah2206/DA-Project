@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
     Search,
     ShoppingBag,
@@ -17,6 +17,7 @@ import {
     User,
     BookOpen,
     Award,
+    MessageCircle,
 } from "lucide-react";
 import { useAppStore } from "../store";
 import type { NotarizedDocument, DocumentType } from "../types";
@@ -24,6 +25,7 @@ import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants/contract";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { parseError } from "../utils/parseError";
+import { io, type Socket } from "socket.io-client";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -35,6 +37,14 @@ type MarketListing = NotarizedDocument & {
 };
 
 type ApiRow = Record<string, unknown>;
+type ChatMessage = {
+    id: string;
+    listingId: string;
+    senderAddress: string;
+    senderName: string;
+    message: string;
+    timestamp: number;
+};
 
 const mapListing = (row: ApiRow): MarketListing => ({
     id: String(row.id),
@@ -88,6 +98,12 @@ const formatDate = (d: Date | string) =>
         year: "numeric",
     });
 
+const formatChatTime = (timestamp: number) =>
+    new Date(timestamp).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+
 const Verify = () => {
     const { token, wallet } = useAppStore();
     const [listings, setListings] = useState<MarketListing[]>([]);
@@ -107,13 +123,25 @@ const Verify = () => {
     const [purchasedIds, setPurchasedIds] = useState<Record<string, boolean>>(
         {},
     );
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState("");
+    const [chatConnected, setChatConnected] = useState(false);
+    const [chatError, setChatError] = useState("");
 
     const heroRef = useRef<HTMLDivElement>(null);
     const statsRef = useRef<HTMLDivElement>(null);
     const gridRef = useRef<HTMLDivElement>(null);
     const filterPanelRef = useRef<HTMLDivElement>(null);
-    const modalRef = useRef<HTMLDivElement>(null);
-    const modalContentRef = useRef<HTMLDivElement>(null);
+    const socketRef = useRef<Socket | null>(null);
+    const chatEndRef = useRef<HTMLDivElement>(null);
+
+    const socketBaseUrl = useMemo(() => {
+        const envUrl =
+            import.meta.env.VITE_SOCKET_URL ??
+            import.meta.env.VITE_API_URL ??
+            "http://localhost:3000/api";
+        return String(envUrl).replace(/\/api\/?$/, "");
+    }, []);
 
     // ── Load purchased docs ──
     useEffect(() => {
@@ -264,62 +292,66 @@ const Verify = () => {
         [],
     );
 
-    // ── GSAP: Modal open/close ──
-    const openModal = useCallback((listing: MarketListing) => {
+    const openDetails = useCallback((listing: MarketListing) => {
         setSelectedListing(listing);
         setPurchaseSuccess(false);
         setPurchaseError("");
-        requestAnimationFrame(() => {
-            if (modalRef.current && modalContentRef.current) {
-                gsap.fromTo(
-                    modalRef.current,
-                    { opacity: 0 },
-                    { opacity: 1, duration: 0.3, ease: "power2.out" },
-                );
-                gsap.fromTo(
-                    modalContentRef.current,
-                    { opacity: 0, y: 40, scale: 0.95 },
-                    {
-                        opacity: 1,
-                        y: 0,
-                        scale: 1,
-                        duration: 0.4,
-                        ease: "back.out(1.7)",
-                        delay: 0.1,
-                    },
-                );
-            }
-        });
+        window.scrollTo({ top: 0, behavior: "smooth" });
     }, []);
 
-    const closeModal = useCallback(() => {
+    const closeDetails = useCallback(() => {
         if (isPurchasing) return;
-        if (modalRef.current && modalContentRef.current) {
-            const tl = gsap.timeline({
-                onComplete: () => {
-                    setSelectedListing(null);
-                    setPurchaseSuccess(false);
-                    setPurchaseError("");
-                },
-            });
-            tl.to(modalContentRef.current, {
-                opacity: 0,
-                y: 30,
-                scale: 0.95,
-                duration: 0.25,
-                ease: "power2.in",
-            });
-            tl.to(
-                modalRef.current,
-                { opacity: 0, duration: 0.2, ease: "power2.in" },
-                "-=0.1",
-            );
-        } else {
-            setSelectedListing(null);
-            setPurchaseSuccess(false);
-            setPurchaseError("");
-        }
+        setSelectedListing(null);
+        setPurchaseSuccess(false);
+        setPurchaseError("");
     }, [isPurchasing]);
+
+    useEffect(() => {
+        if (!selectedListing || !wallet.isConnected || !wallet.address) {
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+            setChatMessages([]);
+            setChatConnected(false);
+            return;
+        }
+
+        const socket = io(socketBaseUrl, { transports: ["websocket"] });
+        socketRef.current = socket;
+        setChatConnected(false);
+        setChatError("");
+
+        socket.on("connect", () => {
+            setChatConnected(true);
+            socket.emit("chat:join", { listingId: selectedListing.id });
+        });
+
+        socket.on("disconnect", () => {
+            setChatConnected(false);
+        });
+
+        socket.on("connect_error", () => {
+            setChatError("Chat is unavailable. Try again in a bit.");
+        });
+
+        socket.on("chat:history", (history: ChatMessage[]) => {
+            setChatMessages(history ?? []);
+        });
+
+        socket.on("chat:message", (message: ChatMessage) => {
+            setChatMessages((prev) => [...prev, message]);
+        });
+
+        return () => {
+            socket.disconnect();
+            socketRef.current = null;
+        };
+    }, [selectedListing?.id, wallet.isConnected, wallet.address, socketBaseUrl]);
+
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [chatMessages.length, selectedListing?.id]);
 
     // ── GSAP: Filter panel ──
     const toggleFilters = useCallback(() => {
@@ -439,6 +471,21 @@ const Verify = () => {
         }
     };
 
+    const handleSendChat = () => {
+        if (!selectedListing || !wallet.address) return;
+        if (!socketRef.current || !chatConnected) return;
+        const message = chatInput.trim();
+        if (!message) return;
+        const senderName = `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`;
+        socketRef.current.emit("chat:message", {
+            listingId: selectedListing.id,
+            senderAddress: wallet.address,
+            senderName,
+            message,
+        });
+        setChatInput("");
+    };
+
     const isPurchased = (id: string) => Boolean(purchasedIds[id]);
     const isOwnerListing = (l: MarketListing) =>
         wallet.address
@@ -508,118 +555,122 @@ const Verify = () => {
         >
             <div className="max-w-7xl mx-auto">
                 {/* ── HERO BANNER ── */}
-                <div
-                    ref={heroRef}
-                    className="relative overflow-hidden rounded-[28px] border border-[#E3DED1] bg-gradient-to-br from-[#FDF9EF] via-[#F2F7F1] to-[#EAF1FF] p-8 sm:p-10 mb-10"
-                >
-                    <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-[#8CD6FF]/25 blur-3xl" />
-                    <div className="absolute -bottom-28 -left-10 h-72 w-72 rounded-full bg-[#FFD28C]/30 blur-3xl" />
-                    <div className="relative z-10 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
-                        <div>
-                            <div className="hero-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#111418] text-[#FDF9EF] text-xs font-semibold tracking-[0.2em] uppercase mb-4">
-                                Live Market
+                {!selectedListing && (
+                    <div
+                        ref={heroRef}
+                        className="relative overflow-hidden rounded-[28px] border border-[#E3DED1] bg-gradient-to-br from-[#FDF9EF] via-[#F2F7F1] to-[#EAF1FF] p-8 sm:p-10 mb-10"
+                    >
+                        <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-[#8CD6FF]/25 blur-3xl" />
+                        <div className="absolute -bottom-28 -left-10 h-72 w-72 rounded-full bg-[#FFD28C]/30 blur-3xl" />
+                        <div className="relative z-10 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
+                            <div>
+                                <div className="hero-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#111418] text-[#FDF9EF] text-xs font-semibold tracking-[0.2em] uppercase mb-4">
+                                    Live Market
+                                </div>
+                                <h1 className="hero-title font-heading text-4xl sm:text-5xl font-bold text-[#111418] leading-tight mb-3">
+                                    Verified documents,
+                                    <span className="block text-[#0C6CF2]">
+                                        ready to trade.
+                                    </span>
+                                </h1>
+                                <p className="hero-sub text-[#4E564C] text-base max-w-xl">
+                                    Discover real, notarized files from wallets
+                                    across the network. Pay once, access instantly —
+                                    no middlemen, no edits.
+                                </p>
                             </div>
-                            <h1 className="hero-title font-heading text-4xl sm:text-5xl font-bold text-[#111418] leading-tight mb-3">
-                                Verified documents,
-                                <span className="block text-[#0C6CF2]">
-                                    ready to trade.
-                                </span>
-                            </h1>
-                            <p className="hero-sub text-[#4E564C] text-base max-w-xl">
-                                Discover real, notarized files from wallets
-                                across the network. Pay once, access instantly —
-                                no middlemen, no edits.
-                            </p>
-                        </div>
-                        <div ref={statsRef} className="grid grid-cols-3 gap-3">
-                            {[
-                                {
-                                    icon: <FileText className="w-4 h-4" />,
-                                    label: "Listed",
-                                    value: listings.length,
-                                },
-                                {
-                                    icon: <ShoppingBag className="w-4 h-4" />,
-                                    label: "Sold",
-                                    value: totalSold,
-                                },
-                                {
-                                    icon: <Shield className="w-4 h-4" />,
-                                    label: "On-chain",
-                                    value: 100,
-                                },
-                            ].map((s) => (
-                                <div
-                                    key={s.label}
-                                    className="stat-box rounded-2xl border border-[#E3DED1] bg-white/80 px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
-                                >
-                                    <div className="flex items-center gap-2 text-[#0C6CF2] mb-1">
-                                        {s.icon}
-                                        <p className="text-xs font-medium text-[#3C4339]">
-                                            {s.label}
+                            <div ref={statsRef} className="grid grid-cols-3 gap-3">
+                                {[
+                                    {
+                                        icon: <FileText className="w-4 h-4" />,
+                                        label: "Listed",
+                                        value: listings.length,
+                                    },
+                                    {
+                                        icon: <ShoppingBag className="w-4 h-4" />,
+                                        label: "Sold",
+                                        value: totalSold,
+                                    },
+                                    {
+                                        icon: <Shield className="w-4 h-4" />,
+                                        label: "On-chain",
+                                        value: 100,
+                                    },
+                                ].map((s) => (
+                                    <div
+                                        key={s.label}
+                                        className="stat-box rounded-2xl border border-[#E3DED1] bg-white/80 px-4 py-3 shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
+                                    >
+                                        <div className="flex items-center gap-2 text-[#0C6CF2] mb-1">
+                                            {s.icon}
+                                            <p className="text-xs font-medium text-[#3C4339]">
+                                                {s.label}
+                                            </p>
+                                        </div>
+                                        <p className="text-[#111418] font-semibold text-xl leading-none">
+                                            <span
+                                                className="stat-number"
+                                                data-value={s.value}
+                                            >
+                                                0
+                                            </span>
+                                            {s.label === "On-chain" ? "%" : ""}
                                         </p>
                                     </div>
-                                    <p className="text-[#111418] font-semibold text-xl leading-none">
-                                        <span
-                                            className="stat-number"
-                                            data-value={s.value}
-                                        >
-                                            0
-                                        </span>
-                                        {s.label === "On-chain" ? "%" : ""}
-                                    </p>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* ── SEARCH & SORT ── */}
-                <div className="mb-5 flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B6F66]" />
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search documents, sellers, tags..."
-                            className="w-full pl-11 pr-10 py-3 rounded-2xl bg-white border border-[#E3DED1] text-[#111418] placeholder-[#8A8F83] focus:border-[#0C6CF2] focus:ring-1 focus:ring-[#0C6CF2] transition-all text-sm"
-                        />
-                        {search && (
-                            <button
-                                onClick={() => setSearch("")}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8F83] hover:text-[#111418]"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        )}
+                {!selectedListing && (
+                    <div className="mb-5 flex flex-col sm:flex-row gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B6F66]" />
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                placeholder="Search documents, sellers, tags..."
+                                className="w-full pl-11 pr-10 py-3 rounded-2xl bg-white border border-[#E3DED1] text-[#111418] placeholder-[#8A8F83] focus:border-[#0C6CF2] focus:ring-1 focus:ring-[#0C6CF2] transition-all text-sm"
+                            />
+                            {search && (
+                                <button
+                                    onClick={() => setSearch("")}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A8F83] hover:text-[#111418]"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+                        <select
+                            value={sortBy}
+                            onChange={(e) =>
+                                setSortBy(e.target.value as typeof sortBy)
+                            }
+                            className="px-4 py-3 rounded-2xl bg-white border border-[#E3DED1] text-[#111418] focus:border-[#0C6CF2] transition-all text-sm"
+                        >
+                            <option value="recent">Most Recent</option>
+                            <option value="popular">Most Popular</option>
+                            <option value="price_asc">Price: Low → High</option>
+                            <option value="price_desc">Price: High → Low</option>
+                        </select>
+                        <button
+                            onClick={toggleFilters}
+                            className={`flex items-center gap-2 px-4 py-3 rounded-2xl border text-sm font-medium transition-all ${showFilters ? "border-[#0C6CF2] bg-[#0C6CF2]/10 text-[#0C6CF2]" : "border-[#E3DED1] bg-white text-[#6B6F66] hover:border-[#0C6CF2]/60"}`}
+                        >
+                            <Filter className="w-4 h-4" />
+                            Filter
+                            <ChevronDown
+                                className={`w-3 h-3 transition-transform ${showFilters ? "rotate-180" : ""}`}
+                            />
+                        </button>
                     </div>
-                    <select
-                        value={sortBy}
-                        onChange={(e) =>
-                            setSortBy(e.target.value as typeof sortBy)
-                        }
-                        className="px-4 py-3 rounded-2xl bg-white border border-[#E3DED1] text-[#111418] focus:border-[#0C6CF2] transition-all text-sm"
-                    >
-                        <option value="recent">Most Recent</option>
-                        <option value="popular">Most Popular</option>
-                        <option value="price_asc">Price: Low → High</option>
-                        <option value="price_desc">Price: High → Low</option>
-                    </select>
-                    <button
-                        onClick={toggleFilters}
-                        className={`flex items-center gap-2 px-4 py-3 rounded-2xl border text-sm font-medium transition-all ${showFilters ? "border-[#0C6CF2] bg-[#0C6CF2]/10 text-[#0C6CF2]" : "border-[#E3DED1] bg-white text-[#6B6F66] hover:border-[#0C6CF2]/60"}`}
-                    >
-                        <Filter className="w-4 h-4" />
-                        Filter
-                        <ChevronDown
-                            className={`w-3 h-3 transition-transform ${showFilters ? "rotate-180" : ""}`}
-                        />
-                    </button>
-                </div>
+                )}
 
                 {/* ── FILTER PANEL ── */}
-                {showFilters && (
+                {!selectedListing && showFilters && (
                     <div ref={filterPanelRef} className="mb-5 overflow-hidden">
                         <div className="flex flex-wrap gap-2 p-4 rounded-2xl bg-white border border-[#E3DED1]">
                             <span className="text-[#6B6F66] text-xs self-center mr-1">
@@ -629,11 +680,10 @@ const Verify = () => {
                                 <button
                                     key={type}
                                     onClick={() => setFilterType(type)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                                        filterType === type
-                                            ? "bg-[#111418] text-[#FDF9EF] border-[#111418]"
-                                            : "border-[#E3DED1] text-[#6B6F66] hover:border-[#0C6CF2]/40 hover:text-[#111418]"
-                                    }`}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${filterType === type
+                                        ? "bg-[#111418] text-[#FDF9EF] border-[#111418]"
+                                        : "border-[#E3DED1] text-[#6B6F66] hover:border-[#0C6CF2]/40 hover:text-[#111418]"
+                                        }`}
                                 >
                                     {type === "All" ? "All Types" : type}
                                 </button>
@@ -642,30 +692,368 @@ const Verify = () => {
                     </div>
                 )}
 
-                <p className="text-[#6B6F66] text-sm mb-6">
-                    Showing{" "}
-                    <span className="text-[#111418] font-semibold">
-                        {filtered.length}
-                    </span>{" "}
-                    listings
-                    {filterType !== "All" && (
-                        <>
-                            {" "}
-                            in{" "}
-                            <span className="text-[#0C6CF2]">{filterType}</span>
-                        </>
-                    )}
-                    {search && (
-                        <>
-                            {" "}
-                            for{" "}
-                            <span className="text-[#0C6CF2]">"{search}"</span>
-                        </>
-                    )}
-                </p>
+                {!selectedListing && (
+                    <p className="text-[#6B6F66] text-sm mb-6">
+                        Showing{" "}
+                        <span className="text-[#111418] font-semibold">
+                            {filtered.length}
+                        </span>{" "}
+                        listings
+                        {filterType !== "All" && (
+                            <>
+                                {" "}
+                                in{" "}
+                                <span className="text-[#0C6CF2]">
+                                    {filterType}
+                                </span>
+                            </>
+                        )}
+                        {search && (
+                            <>
+                                {" "}
+                                for{" "}
+                                <span className="text-[#0C6CF2]">
+                                    "{search}"
+                                </span>
+                            </>
+                        )}
+                    </p>
+                )}
 
-                {/* ── LISTINGS GRID ── */}
-                {isLoading ? (
+                {/* ── LISTINGS GRID / DETAIL VIEW ── */}
+                {selectedListing ? (
+                    <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                        <div className="rounded-[28px] border border-[#E3DED1] bg-white p-7 shadow-[0_12px_32px_rgba(17,20,24,0.12)]">
+                            {/* ── Owner / Purchased banners ── */}
+                            {isOwnerListing(selectedListing) ? (
+                                <div className="mb-5 rounded-xl bg-[#FFF3D6] border border-[#F1C27D] p-4 flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-[#A76815] flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-[#A76815] font-semibold text-sm">
+                                            Your Listing
+                                        </p>
+                                        <p className="text-[#6B6F66] text-xs mt-1">
+                                            You created this listing. You cannot
+                                            purchase your own document.
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : isPurchased(selectedListing.id) ? (
+                                <div className="mb-5 rounded-xl bg-[#E9F7EE] border border-[#BDE9C9] p-4 flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-[#2D8A57] flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-[#2D8A57] font-semibold text-sm">
+                                            Already Purchased
+                                        </p>
+                                        <p className="text-[#6B6F66] text-xs mt-1">
+                                            You already own this document.
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {/* ── Title + back ── */}
+                            <div className="flex items-start justify-between mb-2">
+                                <div className="flex-1 pr-3">
+                                    <h3 className="text-2xl font-bold text-[#111418] leading-snug mb-2">
+                                        {selectedListing.title}
+                                    </h3>
+                                    <span
+                                        className="text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-md border"
+                                        style={{
+                                            backgroundColor: getCatStyle(
+                                                selectedListing.documentType,
+                                            ).bg,
+                                            color: getCatStyle(
+                                                selectedListing.documentType,
+                                            ).text,
+                                            borderColor: getCatStyle(
+                                                selectedListing.documentType,
+                                            ).border,
+                                        }}
+                                    >
+                                        {selectedListing.documentType.toUpperCase()}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={closeDetails}
+                                    disabled={isPurchasing}
+                                    className="px-3 py-2 rounded-xl border border-[#E3DED1] text-[#6B6F66] text-sm font-medium hover:border-[#0C6CF2]/40 hover:text-[#111418] transition-all disabled:opacity-60"
+                                >
+                                    Back
+                                </button>
+                            </div>
+
+                            {/* ── Description ── */}
+                            <p className="text-[#6B6F66] text-sm leading-relaxed mt-4 mb-5">
+                                {selectedListing.description}
+                            </p>
+
+                            {/* ── 4 info boxes ── */}
+                            <div className="grid grid-cols-2 gap-3 mb-5">
+                                <div className="p-3.5 rounded-xl bg-[#F5F2EA]">
+                                    <p className="text-[#8A8F83] text-[10px] uppercase tracking-widest flex items-center gap-1 mb-1.5">
+                                        <User className="w-3 h-3" /> Seller
+                                    </p>
+                                    <p className="text-[#111418] text-sm font-semibold truncate">
+                                        {selectedListing.ownerName}
+                                    </p>
+                                    <p className="text-[#8A8F83] text-xs mt-0.5">
+                                        {selectedListing.sales_count} sold
+                                    </p>
+                                </div>
+
+                                <div className="p-3.5 rounded-xl bg-[#F5F2EA]">
+                                    <p className="text-[#8A8F83] text-[10px] uppercase tracking-widest flex items-center gap-1 mb-1.5">
+                                        <Calendar className="w-3 h-3" /> Notarized
+                                    </p>
+                                    <p className="text-[#111418] text-sm font-semibold">
+                                        {formatDate(selectedListing.mintDate)}
+                                    </p>
+                                </div>
+
+                            </div>
+
+                            {/* ── Blockchain verified badge ── */}
+                            <div className="flex items-center gap-2 p-3 rounded-xl bg-[#EDFAF3] border border-[#BDE9C9] mb-5">
+                                <CheckCircle className="w-4 h-4 text-[#2D8A57] flex-shrink-0" />
+                                <p className="text-[#2D8A57] text-xs font-medium">
+                                    Verified on blockchain — immutable ownership
+                                    proof
+                                </p>
+                                <Award className="w-4 h-4 text-[#2D8A57] ml-auto flex-shrink-0" />
+                            </div>
+
+                            {/* ── Tags ── */}
+                            {selectedListing.tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mb-5">
+                                    {selectedListing.tags.map((tag) => (
+                                        <span
+                                            key={tag}
+                                            className="px-2.5 py-1 rounded-md bg-[#F5F2EA] text-[#6B6F66] text-xs border border-[#E3DED1] font-medium"
+                                        >
+                                            #{tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* ── Purchase success ── */}
+                            {purchaseSuccess ? (
+                                <div className="rounded-xl bg-[#E9F7EE] border border-[#BDE9C9] p-4 flex items-start gap-3">
+                                    <CheckCircle className="w-5 h-5 text-[#2D8A57] flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-[#2D8A57] font-semibold text-sm">
+                                            Purchase Successful
+                                        </p>
+                                        <p className="text-[#6B6F66] text-xs mt-1">
+                                            You now own this document.
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    {!isPurchased(selectedListing.id) &&
+                                        !isOwnerListing(selectedListing) && (
+                                            <div className="flex items-center justify-between p-4 rounded-xl bg-[#F5F2EA] mb-4">
+                                                <div>
+                                                    <p className="text-[#8A8F83] text-xs mb-1.5">
+                                                        Price
+                                                    </p>
+                                                    {selectedListing.price !=
+                                                        null ? (
+                                                        <div className="flex items-baseline gap-1.5">
+                                                            <span className="text-[#0C6CF2] text-sm font-bold">
+                                                                ≡
+                                                            </span>
+                                                            <span className="text-[#0C6CF2] font-extrabold text-2xl leading-none">
+                                                                {selectedListing.price.toFixed(
+                                                                    3,
+                                                                )}
+                                                            </span>
+                                                            <span className="text-[#8A8F83] text-sm font-normal ml-1">
+                                                                {
+                                                                    selectedListing.currency
+                                                                }
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[#6B6F66] font-semibold text-sm">
+                                                            Not listed
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[#8A8F83] text-xs mb-1.5">
+                                                        You receive
+                                                    </p>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Download className="w-4 h-4 text-[#0C6CF2]" />
+                                                        <span className="text-[#111418] text-sm font-medium">
+                                                            Full file access
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                    {purchaseError && (
+                                        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
+                                            {purchaseError}
+                                        </div>
+                                    )}
+                                    {!wallet.isConnected && (
+                                        <div className="mb-4 p-3 rounded-xl bg-[#FFF3D6] border border-[#F1C27D] flex items-center gap-2 text-[#A76815] text-xs">
+                                            <Wallet className="w-4 h-4 flex-shrink-0" />
+                                            Connect your wallet to purchase this
+                                            document.
+                                        </div>
+                                    )}
+
+                                    <div className="flex gap-3 mt-1">
+                                        <button
+                                            onClick={closeDetails}
+                                            disabled={isPurchasing}
+                                            className="flex-1 px-4 py-3 rounded-2xl border border-[#E3DED1] text-[#6B6F66] text-sm font-medium hover:border-[#0C6CF2]/40 hover:text-[#111418] transition-all disabled:opacity-60"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handlePurchase}
+                                            disabled={
+                                                isPurchasing ||
+                                                selectedListing.price == null ||
+                                                isPurchased(selectedListing.id) ||
+                                                isOwnerListing(selectedListing)
+                                            }
+                                            className="flex-1 px-4 py-3 rounded-2xl bg-[#0C6CF2] text-white text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                            {isPurchasing ? (
+                                                <span className="flex items-center justify-center gap-2">
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    Processing...
+                                                </span>
+                                            ) : isOwnerListing(
+                                                selectedListing,
+                                            ) ? (
+                                                "Your Listing"
+                                            ) : isPurchased(selectedListing.id) ? (
+                                                "Owned"
+                                            ) : (
+                                                "Purchase"
+                                            )}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="rounded-[28px] border border-[#E3DED1] bg-white p-6 shadow-[0_12px_32px_rgba(17,20,24,0.12)] flex flex-col min-h-[520px]">
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-9 h-9 rounded-xl bg-[#0C6CF2]/10 flex items-center justify-center text-[#0C6CF2]">
+                                        <MessageCircle className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-semibold text-[#111418]">
+                                            Listing Chat
+                                        </p>
+                                        <p className="text-xs text-[#8A8F83]">
+                                            {chatConnected ? "Live" : "Offline"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <span className="text-[10px] uppercase tracking-[0.3em] text-[#8A8F83]">
+                                    {selectedListing.documentType}
+                                </span>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto rounded-2xl border border-[#E3DED1] bg-[#F9F7F1] p-3 space-y-3">
+                                {chatMessages.length === 0 ? (
+                                    <p className="text-xs text-[#8A8F83] text-center py-10">
+                                        {wallet.isConnected
+                                            ? "No messages yet. Start the conversation."
+                                            : "Connect your wallet to join the chat."}
+                                    </p>
+                                ) : (
+                                    chatMessages.map((msg) => {
+                                        const isOwn =
+                                            wallet.address?.toLowerCase() ===
+                                            msg.senderAddress.toLowerCase();
+                                        const isOwner =
+                                            selectedListing.ownerAddress.toLowerCase() ===
+                                            msg.senderAddress.toLowerCase();
+                                        return (
+                                            <div
+                                                key={msg.id}
+                                                className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                                            >
+                                                <div
+                                                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs ${isOwn
+                                                        ? "bg-[#0C6CF2] text-white"
+                                                        : isOwner
+                                                            ? "bg-[#FFE6CC] text-[#8A3B00] border border-[#F5A65B]"
+                                                            : "bg-white text-[#111418] border border-[#E3DED1]"
+                                                        }`}
+                                                >
+                                                    <div className="flex items-center justify-between gap-2 mb-1 text-[10px] opacity-70">
+                                                        <span>
+                                                            {msg.senderName}
+                                                            {isOwner ? " (Owner)" : ""}
+                                                        </span>
+                                                        <span>
+                                                            {formatChatTime(
+                                                                msg.timestamp,
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    <p className="leading-relaxed">
+                                                        {msg.message}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                                <div ref={chatEndRef} />
+                            </div>
+
+                            {chatError ? (
+                                <div className="mt-3 text-xs text-red-500">
+                                    {chatError}
+                                </div>
+                            ) : null}
+
+                            <form
+                                className="mt-4 flex items-center gap-2"
+                                onSubmit={(e) => {
+                                    e.preventDefault();
+                                    handleSendChat();
+                                }}
+                            >
+                                <input
+                                    type="text"
+                                    value={chatInput}
+                                    onChange={(e) => setChatInput(e.target.value)}
+                                    placeholder={
+                                        wallet.isConnected
+                                            ? "Write a message..."
+                                            : "Connect wallet to chat"
+                                    }
+                                    disabled={!wallet.isConnected}
+                                    className="flex-1 px-3 py-2 rounded-xl border border-[#E3DED1] bg-white text-[#111418] text-xs focus:border-[#0C6CF2] focus:ring-1 focus:ring-[#0C6CF2] transition-all disabled:opacity-60"
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={!wallet.isConnected || !chatInput.trim() || !chatConnected}
+                                    className="px-4 py-2 rounded-xl bg-[#0C6CF2] text-white text-xs font-semibold hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    Send
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                ) : isLoading ? (
                     <div className="py-24 text-center text-[#6B6F66]">
                         <Loader2 className="w-8 h-8 mx-auto mb-3 animate-spin text-[#0C6CF2]" />
                         Loading marketplace...
@@ -702,7 +1090,7 @@ const Verify = () => {
                                     key={listing.id}
                                     className="market-card group rounded-2xl overflow-hidden flex flex-col cursor-pointer bg-white border border-[#E3DED1] shadow-[0_4px_16px_rgba(17,20,24,0.06)] hover:shadow-[0_12px_32px_rgba(17,20,24,0.12)] transition-shadow duration-300"
                                     style={{ transformStyle: "preserve-3d" }}
-                                    onClick={() => openModal(listing)}
+                                    onClick={() => openDetails(listing)}
                                     onMouseMove={handleCardMouseMove}
                                     onMouseLeave={handleCardMouseLeave}
                                 >
@@ -809,30 +1197,29 @@ const Verify = () => {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    openModal(listing);
+                                                    openDetails(listing);
                                                 }}
                                                 disabled={
                                                     listing.price == null ||
                                                     isOwner ||
                                                     hasPurchased
                                                 }
-                                                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${
-                                                    isOwner
-                                                        ? "border-[#F1C27D] text-[#A76815] bg-[#FFF3D6] cursor-not-allowed"
-                                                        : hasPurchased
-                                                          ? "border-[#BDE9C9] text-[#2D8A57] bg-[#E9F7EE] cursor-not-allowed"
-                                                          : listing.price ==
-                                                              null
+                                                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-semibold transition-all ${isOwner
+                                                    ? "border-[#F1C27D] text-[#A76815] bg-[#FFF3D6] cursor-not-allowed"
+                                                    : hasPurchased
+                                                        ? "border-[#BDE9C9] text-[#2D8A57] bg-[#E9F7EE] cursor-not-allowed"
+                                                        : listing.price ==
+                                                            null
                                                             ? "border-[#E3DED1] text-[#9AA094] bg-[#F5F2EA] cursor-not-allowed"
                                                             : "border-[#C8C0B4] text-[#111418] bg-white hover:bg-[#F5F2EA]"
-                                                }`}
+                                                    }`}
                                             >
                                                 <ShoppingBag className="w-3.5 h-3.5" />
                                                 {isOwner
                                                     ? "Listed"
                                                     : hasPurchased
-                                                      ? "Owned"
-                                                      : "Buy"}
+                                                        ? "Owned"
+                                                        : "Buy"}
                                             </button>
                                         </div>
                                     </div>
@@ -843,279 +1230,7 @@ const Verify = () => {
                 )}
             </div>
 
-            {/* ── MODAL ── */}
-            {selectedListing && (
-                <div
-                    ref={modalRef}
-                    className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4 py-8"
-                    style={{ opacity: 0 }}
-                    onClick={closeModal}
-                >
-                    <div
-                        ref={modalContentRef}
-                        className="w-full max-w-lg rounded-3xl border border-[#E3DED1] bg-white overflow-hidden shadow-2xl"
-                        style={{
-                            fontFamily: "'DM Sans', sans-serif",
-                            opacity: 0,
-                            transform: "translateY(40px) scale(0.95)",
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="p-7">
-                            {/* ── Owner / Purchased banners ── */}
-                            {isOwnerListing(selectedListing) ? (
-                                <div className="mb-5 rounded-xl bg-[#FFF3D6] border border-[#F1C27D] p-4 flex items-start gap-3">
-                                    <CheckCircle className="w-5 h-5 text-[#A76815] flex-shrink-0 mt-0.5" />
-                                    <div>
-                                        <p className="text-[#A76815] font-semibold text-sm">
-                                            Your Listing
-                                        </p>
-                                        <p className="text-[#6B6F66] text-xs mt-1">
-                                            You created this listing. You cannot
-                                            purchase your own document.
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : isPurchased(selectedListing.id) ? (
-                                <div className="mb-5 rounded-xl bg-[#E9F7EE] border border-[#BDE9C9] p-4 flex items-start gap-3">
-                                    <CheckCircle className="w-5 h-5 text-[#2D8A57] flex-shrink-0 mt-0.5" />
-                                    <div>
-                                        <p className="text-[#2D8A57] font-semibold text-sm">
-                                            Already Purchased
-                                        </p>
-                                        <p className="text-[#6B6F66] text-xs mt-1">
-                                            You already own this document.
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : null}
-
-                            {/* ── Title + close ── */}
-                            <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1 pr-3">
-                                    <h3 className="text-xl font-bold text-[#111418] leading-snug mb-2">
-                                        {selectedListing.title}
-                                    </h3>
-                                    {/* Category badge — matches ảnh 3 */}
-                                    <span
-                                        className="text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-md border"
-                                        style={{
-                                            backgroundColor: getCatStyle(
-                                                selectedListing.documentType,
-                                            ).bg,
-                                            color: getCatStyle(
-                                                selectedListing.documentType,
-                                            ).text,
-                                            borderColor: getCatStyle(
-                                                selectedListing.documentType,
-                                            ).border,
-                                        }}
-                                    >
-                                        {selectedListing.documentType.toUpperCase()}
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={closeModal}
-                                    disabled={isPurchasing}
-                                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-[#E3DED1] text-[#6B6F66] hover:text-[#111418] transition-colors flex-shrink-0"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-
-                            {/* ── Description ── */}
-                            <p className="text-[#6B6F66] text-sm leading-relaxed mt-4 mb-5">
-                                {selectedListing.description}
-                            </p>
-
-                            {/* ── 4 info boxes ── */}
-                            <div className="grid grid-cols-2 gap-3 mb-5">
-                                {/* Seller */}
-                                <div className="p-3.5 rounded-xl bg-[#F5F2EA]">
-                                    <p className="text-[#8A8F83] text-[10px] uppercase tracking-widest flex items-center gap-1 mb-1.5">
-                                        <User className="w-3 h-3" /> Seller
-                                    </p>
-                                    <p className="text-[#111418] text-sm font-semibold truncate">
-                                        {selectedListing.ownerName}
-                                    </p>
-                                    <p className="text-[#8A8F83] text-xs mt-0.5">
-                                        {selectedListing.sales_count} sold
-                                    </p>
-                                </div>
-                                {/* Token ID */}
-                                <div className="p-3.5 rounded-xl bg-[#F5F2EA]">
-                                    <p className="text-[#8A8F83] text-[10px] uppercase tracking-widest flex items-center gap-1 mb-1.5">
-                                        <Hash className="w-3 h-3" /> Token ID
-                                    </p>
-                                    <p className="font-mono text-[#0C6CF2] text-sm font-bold">
-                                        #{selectedListing.tokenId}
-                                    </p>
-                                </div>
-                                {/* Notarized */}
-                                <div className="p-3.5 rounded-xl bg-[#F5F2EA]">
-                                    <p className="text-[#8A8F83] text-[10px] uppercase tracking-widest flex items-center gap-1 mb-1.5">
-                                        <Calendar className="w-3 h-3" />{" "}
-                                        Notarized
-                                    </p>
-                                    <p className="text-[#111418] text-sm font-semibold">
-                                        {formatDate(selectedListing.mintDate)}
-                                    </p>
-                                </div>
-                                {/* Verification */}
-                                <div className="p-3.5 rounded-xl bg-[#F5F2EA]">
-                                    <p className="text-[#8A8F83] text-[10px] uppercase tracking-widest flex items-center gap-1 mb-1.5">
-                                        <Shield className="w-3 h-3" />{" "}
-                                        Verification
-                                    </p>
-                                    <p className="text-[#111418] text-sm font-semibold">
-                                        SHA-256
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* ── Blockchain verified badge ── */}
-                            <div className="flex items-center gap-2 p-3 rounded-xl bg-[#EDFAF3] border border-[#BDE9C9] mb-5">
-                                <CheckCircle className="w-4 h-4 text-[#2D8A57] flex-shrink-0" />
-                                <p className="text-[#2D8A57] text-xs font-medium">
-                                    Verified on blockchain — immutable ownership
-                                    proof
-                                </p>
-                                <Award className="w-4 h-4 text-[#2D8A57] ml-auto flex-shrink-0" />
-                            </div>
-
-                            {/* ── Tags ── */}
-                            {selectedListing.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 mb-5">
-                                    {selectedListing.tags.map((tag) => (
-                                        <span
-                                            key={tag}
-                                            className="px-2.5 py-1 rounded-md bg-[#F5F2EA] text-[#6B6F66] text-xs border border-[#E3DED1] font-medium"
-                                        >
-                                            #{tag}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* ── Purchase success ── */}
-                            {purchaseSuccess ? (
-                                <div className="rounded-xl bg-[#E9F7EE] border border-[#BDE9C9] p-4 flex items-start gap-3">
-                                    <CheckCircle className="w-5 h-5 text-[#2D8A57] flex-shrink-0 mt-0.5" />
-                                    <div>
-                                        <p className="text-[#2D8A57] font-semibold text-sm">
-                                            Purchase Successful
-                                        </p>
-                                        <p className="text-[#6B6F66] text-xs mt-1">
-                                            You now own this document.
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <>
-                                    {/* ── Price panel ── */}
-                                    {!isPurchased(selectedListing.id) &&
-                                        !isOwnerListing(selectedListing) && (
-                                            <div className="flex items-center justify-between p-4 rounded-xl bg-[#F5F2EA] mb-4">
-                                                <div>
-                                                    <p className="text-[#8A8F83] text-xs mb-1.5">
-                                                        Price
-                                                    </p>
-                                                    {selectedListing.price !=
-                                                    null ? (
-                                                        <div className="flex items-baseline gap-1.5">
-                                                            <span className="text-[#0C6CF2] text-sm font-bold">
-                                                                ≡
-                                                            </span>
-                                                            <span className="text-[#0C6CF2] font-extrabold text-2xl leading-none">
-                                                                {selectedListing.price.toFixed(
-                                                                    3,
-                                                                )}
-                                                            </span>
-                                                            <span className="text-[#8A8F83] text-sm font-normal ml-1">
-                                                                {
-                                                                    selectedListing.currency
-                                                                }
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <p className="text-[#6B6F66] font-semibold text-sm">
-                                                            Not listed
-                                                        </p>
-                                                    )}
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-[#8A8F83] text-xs mb-1.5">
-                                                        You receive
-                                                    </p>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <Download className="w-4 h-4 text-[#0C6CF2]" />
-                                                        <span className="text-[#111418] text-sm font-medium">
-                                                            Full file access
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                    {/* ── Errors / wallet warning ── */}
-                                    {purchaseError && (
-                                        <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs">
-                                            {purchaseError}
-                                        </div>
-                                    )}
-                                    {!wallet.isConnected && (
-                                        <div className="mb-4 p-3 rounded-xl bg-[#FFF3D6] border border-[#F1C27D] flex items-center gap-2 text-[#A76815] text-xs">
-                                            <Wallet className="w-4 h-4 flex-shrink-0" />
-                                            Connect your wallet to purchase this
-                                            document.
-                                        </div>
-                                    )}
-
-                                    {/* ── Action buttons ── */}
-                                    <div className="flex gap-3 mt-1">
-                                        <button
-                                            onClick={closeModal}
-                                            disabled={isPurchasing}
-                                            className="flex-1 px-4 py-3 rounded-2xl border border-[#E3DED1] text-[#6B6F66] text-sm font-medium hover:border-[#0C6CF2]/40 hover:text-[#111418] transition-all disabled:opacity-60"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            onClick={handlePurchase}
-                                            disabled={
-                                                isPurchasing ||
-                                                selectedListing.price == null ||
-                                                isPurchased(
-                                                    selectedListing.id,
-                                                ) ||
-                                                isOwnerListing(selectedListing)
-                                            }
-                                            className="flex-1 px-4 py-3 rounded-2xl bg-[#0C6CF2] text-white text-sm font-semibold hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                                        >
-                                            {isPurchasing ? (
-                                                <span className="flex items-center justify-center gap-2">
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                    Processing...
-                                                </span>
-                                            ) : isOwnerListing(
-                                                  selectedListing,
-                                              ) ? (
-                                                "Your Listing"
-                                            ) : isPurchased(
-                                                  selectedListing.id,
-                                              ) ? (
-                                                "Owned"
-                                            ) : (
-                                                "Purchase"
-                                            )}
-                                        </button>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* ── DETAIL VIEW RENDERED ABOVE ── */}
         </div>
     );
 };

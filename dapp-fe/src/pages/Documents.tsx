@@ -320,8 +320,7 @@ const Documents = () => {
       await tx.wait();
 
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
         }/documents/${doc.id}/unlist`,
         {
           method: "PATCH",
@@ -376,8 +375,7 @@ const Documents = () => {
 
     try {
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
         }/documents/${shareTarget.id}/share-by-wallet`,
         {
           method: "POST",
@@ -468,8 +466,7 @@ const Documents = () => {
       await tx.wait();
 
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
         }/documents/${listTarget.id}/list-for-sale`,
         {
           method: "POST",
@@ -558,8 +555,7 @@ const Documents = () => {
       await tx.wait();
 
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
+        `${import.meta.env.VITE_API_URL ?? "http://localhost:3000/api"
         }/documents/${updateTarget.id}/update-price`,
         {
           method: "PATCH",
@@ -664,7 +660,7 @@ const Documents = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search documents..."
-                className="w-full pl-12 pr-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+                className="w-full pl-12 pr-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-slate-700 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
               />
             </div>
 
@@ -790,11 +786,10 @@ const Documents = () => {
                         >
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div>
-                              <p className="text-gray-900 font-medium">
-                                Version V{group.versions.length - idx} • Token #
-                                {version.tokenId}
+                              <p className="text-gray-500 font-medium">
+                                Version V{group.versions.length - idx}
                               </p>
-                              <p className="text-slate-400 text-sm">
+                              <p className="text-slate-700 text-xm">
                                 {version.fileName} •{" "}
                                 {formatDate(version.mintDate)}
                               </p>
@@ -823,7 +818,7 @@ const Documents = () => {
                               </button> */}
                               <button
                                 onClick={() => openListModal(version)}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-600 hover:text-orange-500 transition-colors"
                                 title="List for Sale"
                               >
                                 <ShoppingBag className="w-4 h-4" />
@@ -831,7 +826,7 @@ const Documents = () => {
                               <button
                                 onClick={() => openUpdateModal(version)}
                                 disabled={!version.isListed}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 title={
                                   version.isListed
                                     ? "Update Price"
@@ -845,7 +840,7 @@ const Documents = () => {
                                   void handleUnlistDocument(version);
                                 }}
                                 disabled={!version.isListed || isUnlisting}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 title={
                                   version.isListed
                                     ? "Unlist"
@@ -860,7 +855,7 @@ const Documents = () => {
                               </button>
                               <button
                                 onClick={() => openShareModal(version)}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white transition-colors"
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 transition-colors"
                                 title="Share By Wallet"
                               >
                                 <Share2 className="w-4 h-4" />
@@ -870,7 +865,7 @@ const Documents = () => {
                                   void handleDownloadFile(version);
                                 }}
                                 disabled={downloadingId === version.id}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 title="Download Original File"
                               >
                                 {downloadingId === version.id ? (
@@ -977,7 +972,7 @@ const Documents = () => {
                 <button
                   onClick={closeShareModal}
                   disabled={isSharing}
-                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-300 hover:text-white hover:border-slate-500 transition-all disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl border border-l-notary-slate text-slate-700 hover:text-slate-700 hover:border-slate-500 transition-all disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1019,7 +1014,7 @@ const Documents = () => {
               </div>
               <button
                 onClick={closeListModal}
-                className="text-slate-500 hover:text-white transition-colors"
+                className="text-slate-500 hover:text-slate-800 "
                 disabled={isListing}
               >
                 ✕
@@ -1028,7 +1023,7 @@ const Documents = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-slate-300 text-sm mb-2">
+                <label className="block text-slate-700 text-sm mb-2">
                   Price (TEST)
                 </label>
                 <input
@@ -1058,7 +1053,7 @@ const Documents = () => {
                 <button
                   onClick={closeListModal}
                   disabled={isListing}
-                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-300 hover:text-white hover:border-slate-500 transition-all disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-700 hover:text-slate-600 hover:border-slate-700 transition-all disabled:opacity-50"
                 >
                   Cancel
                 </button>
@@ -1109,7 +1104,7 @@ const Documents = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-slate-300 text-sm mb-2">
+                <label className="block text-slate-600 text-sm mb-2">
                   New Price (TEST)
                 </label>
                 <input
@@ -1139,7 +1134,7 @@ const Documents = () => {
                 <button
                   onClick={closeUpdateModal}
                   disabled={isUpdating}
-                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-300 hover:text-white hover:border-slate-500 transition-all disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl border border-notary-slate-dark text-slate-700 hover:text-slate-700 hover:border-slate-700 transition-all disabled:opacity-50"
                 >
                   Cancel
                 </button>

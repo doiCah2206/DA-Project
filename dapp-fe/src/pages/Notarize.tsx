@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import {
@@ -33,6 +33,18 @@ const getVersionGroupKey = (doc: NotarizedDocument): string => {
     return `${title}::${owner}`;
 };
 
+const isUserRejectedError = (err: unknown): boolean => {
+    if (!err || typeof err !== "object") return false;
+    const error = err as { code?: number; message?: string };
+    if (error.code === 4001) return true;
+    const message = error.message?.toLowerCase() ?? "";
+    return (
+        message.includes("user rejected") ||
+        message.includes("denied") ||
+        message.includes("cancel")
+    );
+};
+
 const Notarize = () => {
     const navigate = useNavigate();
     const { wallet, addDocument, documents, fetchDocuments } = useAppStore();
@@ -55,6 +67,24 @@ const Notarize = () => {
     const [mintingStep, setMintingStep] = useState("");
     const [copied, setCopied] = useState(false);
     const [mintedDoc, setMintedDoc] = useState<NotarizedDocument | null>(null);
+    const [uiNotice, setUiNotice] = useState<
+        { type: "info" | "error" | "success"; message: string } | null
+    >(null);
+    const uiNoticeTimerRef = useRef<number | null>(null);
+
+    const showUiNotice = useCallback(
+        (type: "info" | "error" | "success", message: string) => {
+            setUiNotice({ type, message });
+            if (uiNoticeTimerRef.current) {
+                window.clearTimeout(uiNoticeTimerRef.current);
+            }
+            uiNoticeTimerRef.current = window.setTimeout(() => {
+                setUiNotice(null);
+                uiNoticeTimerRef.current = null;
+            }, 3500);
+        },
+        [],
+    );
 
     const versionGroups = useMemo(() => {
         const map = new Map<
@@ -387,7 +417,11 @@ const Notarize = () => {
             addDocument(newDoc);
             setMintingStatus("success");
         } catch (err: unknown) {
-            alert(`Mint thất bại: ${parseError(err)}`);
+            if (isUserRejectedError(err)) {
+                showUiNotice("info", "Da huy giao dich mint.");
+            } else {
+                alert(`Mint thất bại: ${parseError(err)}`);
+            }
             setMintingStatus("idle");
             setMintingStep("");
         }
@@ -471,7 +505,7 @@ const Notarize = () => {
                             Add New Version
                         </h3>
                     </div>
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-slate-600 text-sm">
                         Chon document cu va tao them phien ban moi cho no.
                     </p>
                 </button>
@@ -648,7 +682,7 @@ const Notarize = () => {
                         disabled={versionMode === "existing"}
                         placeholder="e.g., Employment Contract - John Doe"
                         aria-invalid={duplicateTitleExists}
-                        className={`w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all disabled:cursor-not-allowed disabled:opacity-70 ${duplicateTitleExists ? "border-red-500/60 focus:border-red-500 focus:ring-red-500/20" : "border-notary-slate-dark"}`}
+                        className={`w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border text-slate-700 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all disabled:cursor-not-allowed disabled:opacity-70 ${duplicateTitleExists ? "border-red-500/60 focus:border-red-500 focus:ring-red-500/20" : "border-notary-slate-dark"}`}
                     />
                     {duplicateTitleExists ? (
                         <p className="mt-2 text-xs text-red-400">
@@ -699,7 +733,7 @@ const Notarize = () => {
                         }
                         placeholder="Brief description of the document..."
                         rows={3}
-                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all resize-none"
+                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-gray-700 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all resize-none"
                     />
                 </div>
 
@@ -717,7 +751,7 @@ const Notarize = () => {
                             }))
                         }
                         placeholder="e.g., John Doe"
-                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-slate-950 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     />
                 </div>
 
@@ -737,7 +771,7 @@ const Notarize = () => {
                             setFormData((prev) => ({ ...prev, tags }));
                         }}
                         placeholder="e.g., contract, legal, important"
-                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-slate-700 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     />
                 </div>
             </div>
@@ -911,7 +945,7 @@ const Notarize = () => {
                 <div className="flex items-center justify-between p-4 rounded-xl bg-notary-gold/10 border border-notary-gold/30">
                     <div className="flex items-center">
                         <AlertCircle className="w-5 h-5 text-notary-gold mr-3" />
-                        <span className="text-slate-300">
+                        <span className="text-slate-950">
                             Estimated Gas Fee
                         </span>
                     </div>
@@ -953,6 +987,28 @@ const Notarize = () => {
             style={{ fontFamily: "'DM Sans', sans-serif" }}
         >
             <div className="max-w-3xl mx-auto">
+                {uiNotice ? (
+                    <div className="fixed top-20 right-5 z-50">
+                        <div
+                            className={`flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg backdrop-blur ${uiNotice.type === "success"
+                                ? "border-notary-success/40 bg-notary-success/15 text-notary-success"
+                                : uiNotice.type === "error"
+                                    ? "border-red-500/40 bg-red-500/10 text-red-400"
+                                    : "border-notary-cyan/40 bg-notary-cyan/10 text-notary-cyan"
+                                }`}
+                        >
+                            <span className="text-sm font-medium">
+                                {uiNotice.message}
+                            </span>
+                            <button
+                                onClick={() => setUiNotice(null)}
+                                className="ml-2 text-inherit/70 hover:text-inherit"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
                 {renderStepIndicator()}
 
                 {step === 1 && renderStep1()}
