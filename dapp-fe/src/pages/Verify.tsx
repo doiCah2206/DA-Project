@@ -25,6 +25,7 @@ import { CONTRACT_ADDRESS, CONTRACT_ABI } from "../constants/contract";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { parseError } from "../utils/parseError";
+import { CustomSelect } from "../components/ui";
 import { io, type Socket } from "socket.io-client";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -1079,28 +1080,25 @@ const Verify = () => {
                       Refresh
                     </button>
                   </div>
-                  <div className="relative mt-2">
-                    <select
+                  <div className="mt-2">
+                    <CustomSelect
                       value={activeBuyerAddress ?? ""}
-                      onChange={(e) => {
-                        const value = e.target.value || null;
+                      onChange={(value) => {
+                        const nextValue = value || null;
                         setChatMessages([]);
                         setChatConversationId(null);
-                        setActiveBuyerAddress(value);
+                        setActiveBuyerAddress(nextValue);
                       }}
-                      className="w-full appearance-none px-3 py-2 pr-9 rounded-xl border border-[#E3DED1] bg-white text-[#111418] text-xs focus:border-[#0C6CF2] focus:ring-1 focus:ring-[#0C6CF2] transition-all"
-                    >
-                      <option value="">Select buyer</option>
-                      {chatThreads.map((thread) => (
-                        <option
-                          key={thread.conversationId}
-                          value={thread.buyerAddress}
-                        >
-                          {thread.buyerAddress}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8A8F83]" />
+                      options={[
+                        { label: "Select buyer", value: "" },
+                        ...chatThreads.map((thread) => ({
+                          label: thread.buyerAddress,
+                          value: thread.buyerAddress,
+                        })),
+                      ]}
+                      icon={<ChevronDown className="w-4 h-4 text-slate-400" />}
+                      className="w-full px-3 py-2 text-xs"
+                    />
                   </div>
                   {chatThreads.length === 0 && (
                     <p className="mt-2 text-xs text-[#8A8F83]">
