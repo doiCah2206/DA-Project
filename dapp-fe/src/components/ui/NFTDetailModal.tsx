@@ -5,7 +5,6 @@ import {
     ExternalLink,
     Download,
     Share2,
-    Award,
     Calendar,
     Hash,
     FileText,
@@ -382,14 +381,14 @@ const NFTDetailModal = () => {
                                         </p>
                                     </div>
 
-                                    {/* IPFS URI */}
+                                    {/* IPFS CID */}
                                     <div className="p-4 rounded-xl bg-notary-dark-secondary/50 border border-notary-slate-dark/30">
                                         <span className="text-slate-500 text-xs flex items-center mb-2">
                                             <LinkIcon className="w-3 h-3 mr-1" />
-                                            IPFS Metadata URI
+                                            IPFS CID
                                         </span>
                                         <p className="font-mono text-xs text-slate-600 break-all">
-                                            {selectedDocument.ipfsUri}
+                                            {selectedDocument.ipfsCid}
                                         </p>
                                     </div>
 

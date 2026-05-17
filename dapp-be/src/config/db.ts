@@ -33,17 +33,17 @@ const shouldUseSsl =
 const pool = new Pool(
     databaseUrl
         ? {
-              connectionString: databaseUrl,
-              ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
-          }
+            connectionString: databaseUrl,
+            ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+        }
         : {
-              host: process.env.DB_HOST || "localhost",
-              port: Number.isNaN(dbPort) ? 5432 : dbPort,
-              database: process.env.DB_NAME,
-              user: process.env.DB_USER,
-              password: process.env.DB_PASSWORD,
-              ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
-          },
+            host: process.env.DB_HOST || "localhost",
+            port: Number.isNaN(dbPort) ? 5432 : dbPort,
+            database: process.env.DB_NAME,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+        },
 );
 
 pool.on("error", (error) => {
@@ -76,11 +76,9 @@ const initializeDatabase = async () => {
                 owner_address VARCHAR(255),
                 tags TEXT[],
                 transaction_hash VARCHAR(255),
-                ipfs_uri VARCHAR(500),
                 ipfs_cid VARCHAR(255),                     -- ← THÊM: CID từ Pinata
                 encrypted_key TEXT,                        -- ← THÊM: AES key (nếu dùng encryption)
                 mint_date TIMESTAMP DEFAULT NOW(),
-                created_at TIMESTAMP DEFAULT NOW(),
                 token_id VARCHAR(255),
                 price NUMERIC,
                 is_listed BOOLEAN DEFAULT false,
@@ -89,6 +87,8 @@ const initializeDatabase = async () => {
 
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS ipfs_cid VARCHAR(255);
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS encrypted_key TEXT;
+            ALTER TABLE documents DROP COLUMN IF EXISTS ipfs_uri;
+            ALTER TABLE documents DROP COLUMN IF EXISTS created_at;
 
             ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_file_hash_key;
 
@@ -99,17 +99,6 @@ const initializeDatabase = async () => {
             CREATE UNIQUE INDEX IF NOT EXISTS idx_documents_file_hash_owner
                 ON documents(file_hash, owner_address);
 
-            CREATE TABLE IF NOT EXISTS access_log (        -- ← THÊM: bảng log verify
-                id SERIAL PRIMARY KEY,
-                document_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
-                file_hash VARCHAR(255),
-                ip_address VARCHAR(45),
-                user_agent TEXT,
-                found BOOLEAN,
-                viewer_address VARCHAR(255),   
-                action VARCHAR(50),
-                accessed_at TIMESTAMP DEFAULT NOW()
-            );
 
             CREATE TABLE IF NOT EXISTS document_access_requests (
                 id SERIAL PRIMARY KEY,
@@ -130,8 +119,7 @@ const initializeDatabase = async () => {
                 ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NULL DEFAULT 'recipient_request';
 
             CREATE INDEX IF NOT EXISTS idx_documents_file_hash ON documents(file_hash);
-            CREATE INDEX IF NOT EXISTS idx_access_log_file_hash ON access_log(file_hash);
-            CREATE INDEX IF NOT EXISTS idx_access_log_document_id ON access_log(document_id);
+            DROP TABLE IF EXISTS access_log;
             CREATE INDEX IF NOT EXISTS idx_access_requests_document_id ON document_access_requests(document_id);
             CREATE INDEX IF NOT EXISTS idx_access_requests_requester_wallet ON document_access_requests(requester_wallet_address);
             CREATE INDEX IF NOT EXISTS idx_access_requests_status ON document_access_requests(status);

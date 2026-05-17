@@ -193,7 +193,9 @@ const Documents = () => {
       await downloadOriginalFile(doc);
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : "Khong tai duoc file goc";
+        error instanceof Error
+          ? error.message
+          : "Unable to download the original file";
       const normalizedMessage = message.toLowerCase();
       const noAccess =
         normalizedMessage.includes("khong co quyen") ||
@@ -204,13 +206,13 @@ const Documents = () => {
       if (noAccess) {
         try {
           await downloadEncryptedFile(doc);
-          setDownloadError(`${message} Da tai ban ma hoa (.enc).`);
+          setDownloadError(`${message} Downloaded the encrypted copy (.enc).`);
           return;
         } catch (fallbackError: unknown) {
           const fallbackMessage =
             fallbackError instanceof Error
               ? fallbackError.message
-              : "Khong tai duoc file ma hoa";
+              : "Unable to download the encrypted file";
           setDownloadError(fallbackMessage);
           console.error("Encrypted fallback error:", fallbackError);
           return;
@@ -273,17 +275,17 @@ const Documents = () => {
 
   const handleUnlistDocument = async (doc: NotarizedDocument) => {
     if (!token) {
-      setUnlistError("Chua xac thuc. Vui long ket noi vi lai.");
+      setUnlistError("Not authenticated. Please reconnect your wallet.");
       return;
     }
 
     if (!wallet.isConnected || !wallet.address) {
-      setUnlistError("Vui long ket noi vi truoc khi huy dang ban.");
+      setUnlistError("Please connect your wallet before unlisting.");
       return;
     }
 
     if (!CONTRACT_ADDRESS) {
-      setUnlistError("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+      setUnlistError("Missing CONTRACT_ADDRESS in dapp-fe/.env");
       return;
     }
 
@@ -293,7 +295,7 @@ const Documents = () => {
 
     try {
       const { BrowserProvider, Contract } = await import("ethers");
-      if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+      if (!window.ethereum) throw new Error("Web3 wallet not found");
       const currentChainId = await window.ethereum.request<string>({
         method: "eth_chainId",
       });
@@ -305,7 +307,7 @@ const Documents = () => {
           });
         } catch {
           throw new Error(
-            "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi huy dang ban",
+            "Please switch to Oasis Sapphire Testnet before unlisting",
           );
         }
       }
@@ -337,10 +339,10 @@ const Documents = () => {
         .catch(() => ({} as { message?: string }));
 
       if (!response.ok) {
-        throw new Error(data.message || "Khong huy dang ban duoc.");
+        throw new Error(data.message || "Unable to unlist.");
       }
 
-      setUnlistSuccess(data.message || "Da huy dang ban thanh cong.");
+      setUnlistSuccess(data.message || "Unlisted successfully.");
       void fetchDocuments();
     } catch (error) {
       const message = parseError(error);
@@ -354,18 +356,18 @@ const Documents = () => {
     if (!shareTarget) return;
 
     if (!token) {
-      setShareError("Chua xac thuc. Vui long ket noi vi lai.");
+      setShareError("Not authenticated. Please reconnect your wallet.");
       return;
     }
 
     if (!wallet.isConnected || !wallet.address) {
-      setShareError("Vui long ket noi vi truoc khi chia se.");
+      setShareError("Please connect your wallet before sharing.");
       return;
     }
 
     const recipientWalletAddress = shareWalletAddress.trim();
     if (!recipientWalletAddress) {
-      setShareError("Vui long nhap dia chi vi nguoi nhan.");
+      setShareError("Please enter the recipient wallet address.");
       return;
     }
 
@@ -395,10 +397,10 @@ const Documents = () => {
         .json()
         .catch(() => ({} as { message?: string }));
       if (!response.ok) {
-        throw new Error(data.message || "Khong chia se duoc tai lieu");
+        throw new Error(data.message || "Unable to share the document.");
       }
 
-      setShareSuccess(data.message || "Da chia se thanh cong.");
+      setShareSuccess(data.message || "Shared successfully.");
       setShareWalletAddress("");
     } catch (error) {
       const message = parseError(error);
@@ -412,23 +414,23 @@ const Documents = () => {
     if (!listTarget) return;
 
     if (!token) {
-      setListError("Chua xac thuc. Vui long ket noi vi lai.");
+      setListError("Not authenticated. Please reconnect your wallet.");
       return;
     }
 
     if (!wallet.isConnected || !wallet.address) {
-      setListError("Vui long ket noi vi truoc khi ban tai lieu.");
+      setListError("Please connect your wallet before listing.");
       return;
     }
 
     if (!CONTRACT_ADDRESS) {
-      setListError("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+      setListError("Missing CONTRACT_ADDRESS in dapp-fe/.env");
       return;
     }
 
     const priceValue = Number(listPrice);
     if (!Number.isFinite(priceValue) || priceValue <= 0) {
-      setListError("Gia ban khong hop le.");
+      setListError("Invalid price.");
       return;
     }
 
@@ -438,7 +440,7 @@ const Documents = () => {
 
     try {
       const { BrowserProvider, Contract, parseEther } = await import("ethers");
-      if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+      if (!window.ethereum) throw new Error("Web3 wallet not found");
       const currentChainId = await window.ethereum.request<string>({
         method: "eth_chainId",
       });
@@ -450,7 +452,7 @@ const Documents = () => {
           });
         } catch {
           throw new Error(
-            "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi ban",
+            "Please switch to Oasis Sapphire Testnet before listing",
           );
         }
       }
@@ -484,10 +486,10 @@ const Documents = () => {
         .catch(() => ({} as { message?: string }));
 
       if (!response.ok) {
-        throw new Error(data.message || "Khong tao duoc listing.");
+        throw new Error(data.message || "Unable to create the listing.");
       }
 
-      setListSuccess(data.message || "Da tao listing thanh cong.");
+      setListSuccess(data.message || "Listing created successfully.");
       void fetchDocuments();
     } catch (error) {
       const message = parseError(error);
@@ -501,23 +503,23 @@ const Documents = () => {
     if (!updateTarget) return;
 
     if (!token) {
-      setUpdateError("Chua xac thuc. Vui long ket noi vi lai.");
+      setUpdateError("Not authenticated. Please reconnect your wallet.");
       return;
     }
 
     if (!wallet.isConnected || !wallet.address) {
-      setUpdateError("Vui long ket noi vi truoc khi cap nhat gia.");
+      setUpdateError("Please connect your wallet before updating the price.");
       return;
     }
 
     if (!CONTRACT_ADDRESS) {
-      setUpdateError("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+      setUpdateError("Missing CONTRACT_ADDRESS in dapp-fe/.env");
       return;
     }
 
     const priceValue = Number(updatePrice);
     if (!Number.isFinite(priceValue) || priceValue <= 0) {
-      setUpdateError("Gia ban khong hop le.");
+      setUpdateError("Invalid price.");
       return;
     }
 
@@ -527,7 +529,7 @@ const Documents = () => {
 
     try {
       const { BrowserProvider, Contract, parseEther } = await import("ethers");
-      if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+      if (!window.ethereum) throw new Error("Web3 wallet not found");
       const currentChainId = await window.ethereum.request<string>({
         method: "eth_chainId",
       });
@@ -539,7 +541,7 @@ const Documents = () => {
           });
         } catch {
           throw new Error(
-            "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi cap nhat gia",
+            "Please switch to Oasis Sapphire Testnet before updating the price",
           );
         }
       }
@@ -573,10 +575,10 @@ const Documents = () => {
         .catch(() => ({} as { message?: string }));
 
       if (!response.ok) {
-        throw new Error(data.message || "Khong cap nhat duoc gia.");
+        throw new Error(data.message || "Unable to update the price.");
       }
 
-      setUpdateSuccess(data.message || "Da cap nhat gia thanh cong.");
+      setUpdateSuccess(data.message || "Price updated successfully.");
       void fetchDocuments();
     } catch (error) {
       const message = parseError(error);

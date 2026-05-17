@@ -12,7 +12,7 @@ import {
     Loader2,
     CheckCircle,
     Wallet,
-    Hash,
+    //Hash,
     Calendar,
     User,
     BookOpen,
@@ -59,9 +59,8 @@ const mapListing = (row: ApiRow): MarketListing => ({
     ownerName: String(row.owner_name ?? ""),
     ownerAddress: String(row.owner_address ?? ""),
     tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
-    mintDate: new Date(String(row.mint_date ?? row.created_at ?? Date.now())),
+    mintDate: new Date(String(row.mint_date ?? Date.now())),
     transactionHash: String(row.transaction_hash ?? ""),
-    ipfsUri: String(row.ipfs_uri ?? ""),
     ipfsCid: String(row.ipfs_cid ?? ""),
     price: row.price == null ? undefined : Number(row.price),
     currency: String(row.currency ?? "TEST"),
@@ -86,10 +85,10 @@ const categoryBadgeStyle: Record<
 const getCatStyle = (type: string) =>
     categoryBadgeStyle[type] ?? categoryBadgeStyle["Other"];
 
-const formatSize = (bytes: number) => {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
+// const formatSize = (bytes: number) => {
+//     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+//     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+// };
 
 const formatDate = (d: Date | string) =>
     new Date(d).toLocaleDateString("en-US", {

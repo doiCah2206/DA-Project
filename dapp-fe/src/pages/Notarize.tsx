@@ -373,7 +373,6 @@ const Notarize = () => {
                     ownerAddress: wallet.address,
                     tags: formData.tags,
                     transactionHash: txHash,
-                    ipfsUri: `ipfs://${ipfsCid}`,
                     ipfsCid,
                     decryptionKeyPayload: { key: aesKeyBase64, iv: ivBase64 },
                 }),
@@ -409,7 +408,6 @@ const Notarize = () => {
                 tags: formData.tags,
                 mintDate: new Date(),
                 transactionHash: txHash,
-                ipfsUri: `ipfs://${ipfsCid}`,
                 ipfsCid,
             };
 
@@ -813,9 +811,9 @@ const Notarize = () => {
                                 </span>
                             </div>
                             <div className="flex justify-between py-2">
-                                <span className="text-slate-400">IPFS URI</span>
+                                <span className="text-slate-400">IPFS CID</span>
                                 <span className="font-mono text-xs text-slate-500">
-                                    {mintedDoc.ipfsUri.slice(0, 20)}...
+                                    {mintedDoc.ipfsCid?.slice(0, 20)}...
                                 </span>
                             </div>
                         </div>
