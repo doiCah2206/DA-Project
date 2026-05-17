@@ -1,41 +1,41 @@
 /**
- * Rút gọn error message từ ethers / MetaMask / BE thành câu thân thiện.
+ * Shorten error messages from ethers / MetaMask / BE into user-friendly text.
  */
 export function parseError(err: unknown): string {
-  if (!(err instanceof Error)) return "Đã xảy ra lỗi không xác định.";
+  if (!(err instanceof Error)) return "An unknown error occurred.";
 
   const msg = err.message?.toLowerCase() ?? "";
 
-  // User từ chối ký / giao dịch trên MetaMask
+  // User rejected signing / transaction on MetaMask
   if (
     msg.includes("user rejected") ||
     msg.includes("user denied") ||
     msg.includes("action_rejected")
   ) {
-    return "Bạn đã từ chối giao dịch trên ví.";
+    return "You rejected the transaction in your wallet.";
   }
 
-  // Không đủ gas / tiền
+  // Insufficient gas / funds
   if (msg.includes("insufficient funds")) {
-    return "Số dư không đủ để thực hiện giao dịch.";
+    return "Insufficient balance to complete the transaction.";
   }
 
-  // Giao dịch bị revert trên chain
+  // Transaction reverted on-chain
   if (msg.includes("execution reverted")) {
-    // Cố trích reason nếu có
+    // Try to extract the revert reason if available
     const reasonMatch = msg.match(/reason="([^"]+)"/);
-    if (reasonMatch) return `Giao dịch thất bại: ${reasonMatch[1]}`;
-    return "Giao dịch bị từ chối bởi smart contract.";
+    if (reasonMatch) return `Transaction failed: ${reasonMatch[1]}`;
+    return "The smart contract rejected the transaction.";
   }
 
   // Timeout / network
   if (msg.includes("timeout") || msg.includes("network")) {
-    return "Lỗi kết nối mạng. Vui lòng thử lại.";
+    return "Network error. Please try again.";
   }
 
-  // Nếu message ngắn gọn (< 120 ký tự) → giữ nguyên (thường là lỗi từ BE)
+  // If the message is short (< 120 chars), keep it (often from BE)
   if (err.message.length < 120) return err.message;
 
-  // Còn lại (message quá dài) → cắt ngắn
-  return "Giao dịch thất bại. Vui lòng thử lại.";
+  // Otherwise (message too long), shorten it
+  return "Transaction failed. Please try again.";
 }

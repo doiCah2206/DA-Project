@@ -218,7 +218,7 @@ const NFTDetailModal = () => {
                                     <div className="absolute inset-0 bg-gradient-to-br from-notary-cyan/5 to-purple-500/5"></div>
 
                                     {/* Stamp overlay */}
-                                    <div className="absolute top-4 right-4 w-24 h-24 opacity-20">
+                                    <div className="absolute top-4 right-4 w-24 h-24">
                                         <svg
                                             viewBox="0 0 100 100"
                                             className="w-full h-full"
@@ -228,23 +228,25 @@ const NFTDetailModal = () => {
                                                 cy="50"
                                                 r="45"
                                                 fill="none"
-                                                stroke="#F5C842"
+                                                stroke="#F1A650"
                                                 strokeWidth="3"
                                                 strokeDasharray="5,5"
+                                                opacity="0.6"
                                             />
                                             <circle
                                                 cx="50"
                                                 cy="50"
                                                 r="35"
                                                 fill="none"
-                                                stroke="#F5C842"
+                                                stroke="#F1A650"
                                                 strokeWidth="2"
+                                                opacity="0.5"
                                             />
                                             <text
                                                 x="50"
                                                 y="55"
                                                 textAnchor="middle"
-                                                fill="#F5C842"
+                                                fill="#F1A650"
                                                 fontSize="12"
                                                 fontWeight="bold"
                                             >
@@ -280,13 +282,13 @@ const NFTDetailModal = () => {
                                         </div>
 
                                         {/* Token ID */}
-                                        <div className="inline-flex items-center px-4 py-2 rounded-xl bg-notary-cyan/10 border border-notary-cyan/20">
+                                        {/* <div className="inline-flex items-center px-4 py-2 rounded-xl bg-notary-cyan/10 border border-notary-cyan/20">
                                             <Award className="w-5 h-5 text-notary-cyan mr-2" />
                                             <span className="font-mono text-notary-cyan font-bold">
                                                 Token ID #
                                                 {selectedDocument.tokenId}
                                             </span>
-                                        </div>
+                                        </div> */}
                                     </div>
                                 </div>
 

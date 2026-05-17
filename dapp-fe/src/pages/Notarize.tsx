@@ -240,28 +240,28 @@ const Notarize = () => {
         if (!wallet.isConnected || !formData.file) return;
         if (duplicateFileExists) {
             alert(
-                "File nay da ton tai voi vi dang nhap hien tai. Vui long chon file khac hoac dung phien ban da co neu phu hop.",
+                "This file already exists for the current wallet. Please choose a different file or use the existing version if appropriate.",
             );
             return;
         }
         if (duplicateTitleExists) {
             alert(
-                "Document Title da ton tai. Vui long doi ten hoac chon Add New Version neu day la phien ban moi.",
+                "The document title already exists. Please rename it or choose Add New Version if this is a new version.",
             );
             return;
         }
         const token = useAppStore.getState().token;
         if (!token) {
-            alert("Chua xac thuc. Vui long ket noi vi lai.");
+            alert("Not authenticated. Please reconnect your wallet.");
             return;
         }
         if (!CONTRACT_ADDRESS) {
-            alert("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+            alert("Missing CONTRACT_ADDRESS in dapp-fe/.env");
             return;
         }
 
         setMintingStatus("preparing");
-        setMintingStep("Dang ma hoa file...");
+        setMintingStep("Encrypting file...");
 
         try {
             const fileBuffer = await formData.file.arrayBuffer();
@@ -283,7 +283,7 @@ const Notarize = () => {
             const ivBase64 = btoa(String.fromCharCode(...iv));
 
             setMintingStatus("uploading");
-            setMintingStep("Dang upload len IPFS (Pinata)...");
+            setMintingStep("Uploading to IPFS (Pinata)...");
             const encryptedBlob = new Blob([encryptedBuffer], {
                 type: "application/octet-stream",
             });
@@ -306,16 +306,16 @@ const Notarize = () => {
             if (!pinataRes.ok) {
                 const pinataError = await pinataRes.text().catch(() => "");
                 throw new Error(
-                    `Upload Pinata that bai (${pinataRes.status}): ${pinataError || "khong co phan hoi"}`,
+                    `Pinata upload failed (${pinataRes.status}): ${pinataError || "no response"}`,
                 );
             }
             const pinataData = await pinataRes.json();
             const ipfsCid: string = pinataData.IpfsHash;
 
             setMintingStatus("minting");
-            setMintingStep("Dang mint NFT tren blockchain...");
+            setMintingStep("Minting NFT on the blockchain...");
             const { BrowserProvider, Contract } = await import("ethers");
-            if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+            if (!window.ethereum) throw new Error("Web3 wallet not found");
             const currentChainId = await window.ethereum.request<string>({
                 method: "eth_chainId",
             });
@@ -327,7 +327,7 @@ const Notarize = () => {
                     });
                 } catch {
                     throw new Error(
-                        "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi mint",
+                        "Please switch to the Oasis Sapphire Testnet before minting",
                     );
                 }
             }
@@ -382,7 +382,7 @@ const Notarize = () => {
             if (!mintRes.ok)
                 throw new Error(
                     mintData.message ||
-                    `Luu metadata that bai (${mintRes.status})`,
+                    `Failed to save metadata (${mintRes.status})`,
                 );
 
             await fetch(`${API}/documents/${mintData.document.id}/ipfs-cid`, {
@@ -418,9 +418,9 @@ const Notarize = () => {
             setMintingStatus("success");
         } catch (err: unknown) {
             if (isUserRejectedError(err)) {
-                showUiNotice("info", "Da huy giao dich mint.");
+                showUiNotice("info", "Mint transaction cancelled");
             } else {
-                alert(`Mint thất bại: ${parseError(err)}`);
+                alert(`Mint failed: ${parseError(err)}`);
             }
             setMintingStatus("idle");
             setMintingStep("");
@@ -486,9 +486,8 @@ const Notarize = () => {
                             New Document
                         </h3>
                     </div>
-                    <p className="text-slate-400 text-sm">
-                        Tao mot document hoan toan moi, version se bat dau tu
-                        V1.
+                    <p className="text-slate-600 text-sm">
+                        Create a new document, starting with version V1
                     </p>
                 </button>
 
@@ -506,21 +505,21 @@ const Notarize = () => {
                         </h3>
                     </div>
                     <p className="text-slate-600 text-sm">
-                        Chon document cu va tao them phien ban moi cho no.
+                        Select the old document and add a new version to it
                     </p>
                 </button>
             </div>
 
             {versionMode === "existing" ? (
                 <div className="space-y-3">
-                    <h4 className="text-slate-300 font-semibold">
-                        Chon Document Goc
+                    <h4 className="text-slate-600 font-semibold">
+                        Choose Document
                     </h4>
 
                     {versionGroups.length === 0 ? (
                         <div className="rounded-xl border border-notary-slate-dark bg-notary-dark-secondary/40 p-4 text-slate-400 text-sm">
-                            Ban chua co document nao trong My Documents de them
-                            version.
+                            You do not have any documents in My Documents to
+                            add a version.
                         </div>
                     ) : (
                         <div className="max-h-72 overflow-auto space-y-2 pr-1">
@@ -562,10 +561,10 @@ const Notarize = () => {
                     Upload File
                 </h2>
                 <p className="text-slate-400">
-                    Upload file cho{" "}
+                    Upload file for{" "}
                     {versionMode === "existing"
                         ? `Version ${nextVersionNumber}`
-                        : "document moi"}
+                        : "a new document"}
                 </p>
             </div>
 
@@ -661,7 +660,7 @@ const Notarize = () => {
                     Fill Metadata
                 </h2>
                 <p className="text-slate-400">
-                    Cap nhat thong tin document truoc khi mint
+                    Update document information before minting
                 </p>
             </div>
 
@@ -792,9 +791,9 @@ const Notarize = () => {
 
                     <p className="text-slate-400 mb-8">
                         {versionMode === "existing"
-                            ? `Da tao Version ${nextVersionNumber}`
-                            : "Da tao Version 1"}{" "}
-                        cho document.
+                            ? `Created Version ${nextVersionNumber}`
+                            : "Created Version 1"}{" "}
+                        for the document.
                     </p>
 
                     <div className="notary-card rounded-2xl p-6 text-left mb-8">
