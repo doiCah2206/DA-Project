@@ -14,8 +14,6 @@ export const CONTRACT_ABI = [
   "function buyDocument(bytes32 hash) payable",
   "function getSaleInfo(bytes32 hash) view returns (uint256 price, bool forSale, uint256 soldCount)",
   "function getMyRecord(bytes32 hash) view returns (address issuer, uint256 timestamp, bool valid, string ipfsCid, string projectName, string description)",
-  "function verifyCertificate(bytes32 hash) returns (address issuer, uint256 timestamp, bool valid)",
-  "function revokeCertificate(bytes32 hash)",
   "function isHashExists(bytes32 hash) view returns (bool)",
   "function getCertificate(bytes32 hash) view returns (tuple(address issuer, uint256 timestamp, bool valid))",
 ];

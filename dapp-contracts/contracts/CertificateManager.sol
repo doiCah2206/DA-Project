@@ -24,12 +24,6 @@ contract CertificateManager {
     mapping(bytes32 => mapping(address => bool)) private buyers;
 
     event CertificateIssued(bytes32 indexed hash, address issuer);
-    event CertificateRevoked(bytes32 indexed hash);
-    event AccessLogged(
-        bytes32 indexed hash,
-        address verifier,
-        uint256 timestamp
-    );
 
     event DocumentListedForSale(
         bytes32 indexed hash,
@@ -79,14 +73,6 @@ contract CertificateManager {
         emit CertificateIssued(hash, msg.sender);
     }
 
-    function verifyCertificate(
-        bytes32 hash
-    ) public returns (address issuer, uint256 timestamp, bool valid) {
-        require(isHashExists(hash), "CM: Hash khong ton tai");
-        Certificate memory cert = certificates[hash];
-        emit AccessLogged(hash, msg.sender, block.timestamp);
-        return (cert.issuer, cert.timestamp, cert.valid);
-    }
 
     function listDocumentForSale(bytes32 hash, uint256 price) public {
         require(isHashExists(hash), "CM: Hash khong ton tai");
@@ -210,15 +196,4 @@ contract CertificateManager {
         return (sale.price, sale.forSale, sale.soldCount);
     }
 
-    function revokeCertificate(bytes32 hash) public {
-        require(isHashExists(hash), "CM: Hash khong ton tai");
-        Certificate storage cert = certificates[hash];
-        require(
-            cert.issuer == msg.sender,
-            "CM: Chi co nguoi cap moi thu hoi duoc"
-        );
-        require(cert.valid, "CM: Da bi thu hoi roi");
-        cert.valid = false;
-        emit CertificateRevoked(hash);
-    }
 }
