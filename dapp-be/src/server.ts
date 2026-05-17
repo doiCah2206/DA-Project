@@ -16,11 +16,12 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const ALLOW_ALL_ORIGINS = process.env.CORS_ALLOW_ALL === "true";
 
 // Middleware
 app.use(
   cors({
-    origin: CLIENT_ORIGIN,
+    origin: ALLOW_ALL_ORIGINS ? true : CLIENT_ORIGIN,
   }),
 );
 app.use(express.json());
@@ -37,7 +38,7 @@ app.get("/", (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_ORIGIN,
+    origin: ALLOW_ALL_ORIGINS ? true : CLIENT_ORIGIN,
     methods: ["GET", "POST"],
   },
 });
