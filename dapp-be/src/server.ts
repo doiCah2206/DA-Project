@@ -67,6 +67,7 @@ type SocketUser = {
 const MAX_MESSAGES = 200;
 
 const getRoomKey = (conversationId: string) => `conversation:${conversationId}`;
+const getListingRoomKey = (listingId: number) => `listing:${listingId}`;
 const normalizeAddress = (value?: string) => value?.trim().toLowerCase();
 const toTimestamp = (value?: string | null) =>
   value ? new Date(value).getTime() : Date.now();
@@ -184,6 +185,28 @@ io.use((socket, next) => {
 });
 
 io.on("connection", (socket) => {
+  socket.on("chat:listing-join", async (payload: { listingId?: string }) => {
+    try {
+      const listingId = Number(payload?.listingId);
+      if (!Number.isFinite(listingId)) return;
+
+      const user = (socket.data as any).user as SocketUser | undefined;
+      const walletAddress = normalizeAddress(user?.wallet_address);
+      if (!walletAddress) return;
+
+      const docResult = await pool.query(
+        "SELECT owner_address FROM documents WHERE id = $1",
+        [listingId],
+      );
+      const sellerAddress = normalizeAddress(docResult.rows[0]?.owner_address);
+      if (!sellerAddress || sellerAddress !== walletAddress) return;
+
+      socket.join(getListingRoomKey(listingId));
+    } catch (error) {
+      console.error("Lỗi chat:listing-join:", error);
+    }
+  });
+
   socket.on("chat:threads", async (payload: { listingId?: string }) => {
     try {
       const listingId = Number(payload?.listingId);
@@ -316,6 +339,16 @@ io.on("connection", (socket) => {
 
         const room = getRoomKey(conversationId);
         io.to(room).emit("chat:message", entry);
+
+        const listingRoom = getListingRoomKey(Number(conversation.listing_id));
+        io.to(listingRoom).emit("chat:notify", {
+          conversationId,
+          listingId: String(conversation.listing_id),
+          buyerAddress,
+          sellerAddress,
+          message,
+          timestamp: entry.timestamp,
+        });
       } catch (error) {
         console.error("Lỗi chat:message:", error);
       }

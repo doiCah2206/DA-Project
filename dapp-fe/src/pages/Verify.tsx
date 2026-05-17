@@ -148,6 +148,7 @@ const Verify = () => {
   const socketRef = useRef<Socket | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const activeConversationRef = useRef<string | null>(null);
+  const activeBuyerRef = useRef<string | null>(null);
 
   const socketBaseUrl = useMemo(() => {
     const envUrl =
@@ -339,6 +340,7 @@ const Verify = () => {
         selectedListing.ownerAddress.toLowerCase() ===
         wallet.address?.toLowerCase()
       ) {
+        socket.emit("chat:listing-join", { listingId: selectedListing.id });
         socket.emit("chat:threads", { listingId: selectedListing.id });
       } else {
         socket.emit("chat:join", { listingId: selectedListing.id });
@@ -356,6 +358,57 @@ const Verify = () => {
     socket.on("chat:threads", (threads: ChatThread[]) => {
       setChatThreads(Array.isArray(threads) ? threads : []);
     });
+
+    socket.on(
+      "chat:notify",
+      (payload: {
+        conversationId: string;
+        listingId: string;
+        buyerAddress: string;
+        lastMessage?: string;
+        message?: string;
+        timestamp: number;
+      }) => {
+        if (!payload?.conversationId) return;
+        if (String(payload.listingId) !== String(selectedListing.id)) return;
+
+        setChatThreads((prev) => {
+          const nextMessage = payload.message ?? payload.lastMessage ?? "";
+          const nextThread: ChatThread = {
+            conversationId: payload.conversationId,
+            buyerAddress: payload.buyerAddress,
+            lastMessage: nextMessage,
+            lastTimestamp: payload.timestamp,
+          };
+          const existing = prev.find(
+            (thread) => thread.conversationId === payload.conversationId,
+          );
+          if (!existing) return [nextThread, ...prev];
+
+          return prev.map((thread) =>
+            thread.conversationId === payload.conversationId
+              ? { ...thread, ...nextThread }
+              : thread,
+          );
+        });
+
+        if (
+          selectedListing.ownerAddress.toLowerCase() !==
+          wallet.address?.toLowerCase()
+        ) {
+          return;
+        }
+
+        if (!activeBuyerRef.current) {
+          setActiveBuyerAddress(payload.buyerAddress);
+          setChatConversationId(payload.conversationId);
+          socket.emit("chat:join", {
+            listingId: selectedListing.id,
+            buyerAddress: payload.buyerAddress,
+          });
+        }
+      },
+    );
 
     socket.on(
       "chat:ready",
@@ -395,6 +448,10 @@ const Verify = () => {
   useEffect(() => {
     activeConversationRef.current = chatConversationId;
   }, [chatConversationId]);
+
+  useEffect(() => {
+    activeBuyerRef.current = activeBuyerAddress;
+  }, [activeBuyerAddress]);
 
   useEffect(() => {
     if (!socketRef.current) return;
