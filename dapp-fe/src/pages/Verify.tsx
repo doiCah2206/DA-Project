@@ -1041,7 +1041,7 @@ const Verify = () => {
               )}
             </div>
 
-            <div className="rounded-[28px] border border-[#E3DED1] bg-white p-6 shadow-[0_12px_32px_rgba(17,20,24,0.12)] flex flex-col min-h-[520px]">
+            <div className="rounded-[28px] border border-[#E3DED1] bg-white p-6 shadow-[0_12px_32px_rgba(17,20,24,0.12)] flex flex-col h-[520px]">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <div className="w-9 h-9 rounded-xl bg-[#0C6CF2]/10 flex items-center justify-center text-[#0C6CF2]">
@@ -1062,7 +1062,7 @@ const Verify = () => {
               </div>
 
               {isOwnerListing(selectedListing) && (
-                <div className="mb-3">
+                <div className="mb-3 relative z-20">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] uppercase tracking-widest text-[#8A8F83]">
                       Buyer conversation
@@ -1079,26 +1079,29 @@ const Verify = () => {
                       Refresh
                     </button>
                   </div>
-                  <select
-                    value={activeBuyerAddress ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value || null;
-                      setChatMessages([]);
-                      setChatConversationId(null);
-                      setActiveBuyerAddress(value);
-                    }}
-                    className="mt-2 w-full px-3 py-2 rounded-xl border border-[#E3DED1] bg-white text-[#111418] text-xs focus:border-[#0C6CF2] focus:ring-1 focus:ring-[#0C6CF2] transition-all"
-                  >
-                    <option value="">Select buyer</option>
-                    {chatThreads.map((thread) => (
-                      <option
-                        key={thread.conversationId}
-                        value={thread.buyerAddress}
-                      >
-                        {thread.buyerAddress}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative mt-2">
+                    <select
+                      value={activeBuyerAddress ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value || null;
+                        setChatMessages([]);
+                        setChatConversationId(null);
+                        setActiveBuyerAddress(value);
+                      }}
+                      className="w-full appearance-none px-3 py-2 pr-9 rounded-xl border border-[#E3DED1] bg-white text-[#111418] text-xs focus:border-[#0C6CF2] focus:ring-1 focus:ring-[#0C6CF2] transition-all"
+                    >
+                      <option value="">Select buyer</option>
+                      {chatThreads.map((thread) => (
+                        <option
+                          key={thread.conversationId}
+                          value={thread.buyerAddress}
+                        >
+                          {thread.buyerAddress}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#8A8F83]" />
+                  </div>
                   {chatThreads.length === 0 && (
                     <p className="mt-2 text-xs text-[#8A8F83]">
                       No buyer conversations yet.
@@ -1107,7 +1110,7 @@ const Verify = () => {
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto rounded-2xl border border-[#E3DED1] bg-[#F9F7F1] p-3 space-y-3">
+              <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-[#E3DED1] bg-[#F9F7F1] p-3 space-y-3">
                 {chatMessages.length === 0 ? (
                   <p className="text-xs text-[#8A8F83] text-center py-10">
                     {!wallet.isConnected
