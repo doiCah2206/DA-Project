@@ -135,7 +135,7 @@ const SharedDocuments = () => {
                         <div className="w-20 h-20 rounded-full bg-notary-dark-secondary flex items-center justify-center mx-auto mb-5">
                             <ShieldCheck className="w-10 h-10 text-slate-500" />
                         </div>
-                        <h2 className="font-heading text-xl font-semibold text-white mb-2">No shared documents yet</h2>
+                        <h2 className="font-heading text-xl font-semibold text-slate-800 mb-2">No shared documents yet</h2>
                         <p className="text-slate-400">When an owner approves your request, the document will appear here.</p>
                     </div>
                 ) : (
