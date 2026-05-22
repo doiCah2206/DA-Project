@@ -50,15 +50,17 @@ const Documents = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<DocumentType | "All">("All");
   const [sortBy, setSortBy] = useState<"recent" | "oldest">("recent");
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [expandedGroups, setExpandedGroups] = useState<
+    Record<string, boolean>
+  >({});
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [shareTarget, setShareTarget] = useState<NotarizedDocument | null>(
     null,
   );
-  const [listTarget, setListTarget] = useState<NotarizedDocument | null>(null);
+  const [listTarget, setListTarget] = useState<NotarizedDocument | null>(
+    null,
+  );
   const [listPrice, setListPrice] = useState("");
   const [listError, setListError] = useState<string | null>(null);
   const [listSuccess, setListSuccess] = useState<string | null>(null);
@@ -113,7 +115,8 @@ const Documents = () => {
       ...group,
       versions: [...group.versions].sort(
         (a, b) =>
-          new Date(b.mintDate).getTime() - new Date(a.mintDate).getTime(),
+          new Date(b.mintDate).getTime() -
+          new Date(a.mintDate).getTime(),
       ),
     }));
   }, [documents]);
@@ -129,7 +132,9 @@ const Documents = () => {
             doc.title.toLowerCase().includes(query) ||
             doc.fileName.toLowerCase().includes(query) ||
             doc.description.toLowerCase().includes(query) ||
-            doc.tags.some((tag) => tag.toLowerCase().includes(query)),
+            doc.tags.some((tag) =>
+              tag.toLowerCase().includes(query),
+            ),
         ),
       );
     }
@@ -171,9 +176,12 @@ const Documents = () => {
     const colors: Record<DocumentType, string> = {
       Document: "bg-blue-500/20 text-blue-400 border-blue-500/30",
       Template: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-      "Guide & Report": "bg-green-500/20 text-green-400 border-green-500/30",
-      "Creative Asset": "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-      "Digital Resource": "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
+      "Guide & Report":
+        "bg-green-500/20 text-green-400 border-green-500/30",
+      "Creative Asset":
+        "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+      "Digital Resource":
+        "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
       Other: "bg-slate-500/20 text-slate-400 border-slate-500/30",
     };
     return colors[type];
@@ -206,7 +214,9 @@ const Documents = () => {
       if (noAccess) {
         try {
           await downloadEncryptedFile(doc);
-          setDownloadError(`${message} Downloaded the encrypted copy (.enc).`);
+          setDownloadError(
+            `${message} Downloaded the encrypted copy (.enc).`,
+          );
           return;
         } catch (fallbackError: unknown) {
           const fallbackMessage =
@@ -314,7 +324,11 @@ const Documents = () => {
 
       const browserProvider = new BrowserProvider(window.ethereum);
       const signer = await browserProvider.getSigner();
-      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contract = new Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        signer,
+      );
       const hashBytes32 = doc.fileHash.startsWith("0x")
         ? doc.fileHash
         : `0x${doc.fileHash}`;
@@ -336,7 +350,7 @@ const Documents = () => {
 
       const data = await response
         .json()
-        .catch(() => ({} as { message?: string }));
+        .catch(() => ({}) as { message?: string });
 
       if (!response.ok) {
         throw new Error(data.message || "Unable to unlist.");
@@ -395,9 +409,11 @@ const Documents = () => {
 
       const data = await response
         .json()
-        .catch(() => ({} as { message?: string }));
+        .catch(() => ({}) as { message?: string });
       if (!response.ok) {
-        throw new Error(data.message || "Unable to share the document.");
+        throw new Error(
+          data.message || "Unable to share the document.",
+        );
       }
 
       setShareSuccess(data.message || "Shared successfully.");
@@ -439,7 +455,8 @@ const Documents = () => {
     setListSuccess(null);
 
     try {
-      const { BrowserProvider, Contract, parseEther } = await import("ethers");
+      const { BrowserProvider, Contract, parseEther } =
+        await import("ethers");
       if (!window.ethereum) throw new Error("Web3 wallet not found");
       const currentChainId = await window.ethereum.request<string>({
         method: "eth_chainId",
@@ -459,12 +476,19 @@ const Documents = () => {
 
       const browserProvider = new BrowserProvider(window.ethereum);
       const signer = await browserProvider.getSigner();
-      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contract = new Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        signer,
+      );
       const hashBytes32 = listTarget.fileHash.startsWith("0x")
         ? listTarget.fileHash
         : `0x${listTarget.fileHash}`;
       const weiPrice = parseEther(priceValue.toString());
-      const tx = await contract.listDocumentForSale(hashBytes32, weiPrice);
+      const tx = await contract.listDocumentForSale(
+        hashBytes32,
+        weiPrice,
+      );
       await tx.wait();
 
       const response = await fetch(
@@ -483,10 +507,12 @@ const Documents = () => {
 
       const data = await response
         .json()
-        .catch(() => ({} as { message?: string }));
+        .catch(() => ({}) as { message?: string });
 
       if (!response.ok) {
-        throw new Error(data.message || "Unable to create the listing.");
+        throw new Error(
+          data.message || "Unable to create the listing.",
+        );
       }
 
       setListSuccess(data.message || "Listing created successfully.");
@@ -508,7 +534,9 @@ const Documents = () => {
     }
 
     if (!wallet.isConnected || !wallet.address) {
-      setUpdateError("Please connect your wallet before updating the price.");
+      setUpdateError(
+        "Please connect your wallet before updating the price.",
+      );
       return;
     }
 
@@ -528,7 +556,8 @@ const Documents = () => {
     setUpdateSuccess(null);
 
     try {
-      const { BrowserProvider, Contract, parseEther } = await import("ethers");
+      const { BrowserProvider, Contract, parseEther } =
+        await import("ethers");
       if (!window.ethereum) throw new Error("Web3 wallet not found");
       const currentChainId = await window.ethereum.request<string>({
         method: "eth_chainId",
@@ -548,7 +577,11 @@ const Documents = () => {
 
       const browserProvider = new BrowserProvider(window.ethereum);
       const signer = await browserProvider.getSigner();
-      const contract = new Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contract = new Contract(
+        CONTRACT_ADDRESS,
+        CONTRACT_ABI,
+        signer,
+      );
       const hashBytes32 = updateTarget.fileHash.startsWith("0x")
         ? updateTarget.fileHash
         : `0x${updateTarget.fileHash}`;
@@ -572,7 +605,7 @@ const Documents = () => {
 
       const data = await response
         .json()
-        .catch(() => ({} as { message?: string }));
+        .catch(() => ({}) as { message?: string });
 
       if (!response.ok) {
         throw new Error(data.message || "Unable to update the price.");
@@ -608,8 +641,12 @@ const Documents = () => {
           <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 animate-slide-up">
             <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-red-400 font-medium">Download Error</p>
-              <p className="text-red-300 text-sm mt-1">{downloadError}</p>
+              <p className="text-red-400 font-medium">
+                Download Error
+              </p>
+              <p className="text-red-300 text-sm mt-1">
+                {downloadError}
+              </p>
             </div>
             <button
               onClick={() => setDownloadError(null)}
@@ -624,8 +661,12 @@ const Documents = () => {
           <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 animate-slide-up">
             <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-red-400 font-medium">Unlist Error</p>
-              <p className="text-red-300 text-sm mt-1">{unlistError}</p>
+              <p className="text-red-400 font-medium">
+                Unlist Error
+              </p>
+              <p className="text-red-300 text-sm mt-1">
+                {unlistError}
+              </p>
             </div>
             <button
               onClick={() => setUnlistError(null)}
@@ -639,7 +680,9 @@ const Documents = () => {
         {unlistSuccess && (
           <div className="mb-6 flex items-start gap-3 p-4 rounded-xl bg-notary-success/10 border border-notary-success/30 animate-slide-up">
             <div className="flex-1">
-              <p className="text-notary-success font-medium">Unlisted</p>
+              <p className="text-notary-success font-medium">
+                Unlisted
+              </p>
               <p className="text-notary-success/80 text-sm mt-1">
                 {unlistSuccess}
               </p>
@@ -668,7 +711,9 @@ const Documents = () => {
 
             <CustomSelect
               value={filterType}
-              onChange={(value) => setFilterType(value as DocumentType | "All")}
+              onChange={(value) =>
+                setFilterType(value as DocumentType | "All")
+              }
               options={[
                 { label: "All Types", value: "All" },
                 ...documentTypes.map((type) => ({
@@ -682,20 +727,24 @@ const Documents = () => {
 
             <CustomSelect
               value={sortBy}
-              onChange={(value) => setSortBy(value as "recent" | "oldest")}
+              onChange={(value) =>
+                setSortBy(value as "recent" | "oldest")
+              }
               options={[
                 { label: "Most Recent", value: "recent" },
                 { label: "Oldest First", value: "oldest" },
               ]}
-              icon={<Calendar className="w-5 h-5 text-slate-400" />}
+              icon={
+                <Calendar className="w-5 h-5 text-slate-400" />
+              }
               className="w-full sm:w-40"
             />
           </div>
         </div>
 
         <p className="text-slate-500 text-sm mb-6">
-          Showing {filteredGroups.length} document groups ({documents.length}{" "}
-          total versions)
+          Showing {filteredGroups.length} document groups (
+          {documents.length} total versions)
         </p>
 
         {filteredGroups.length > 0 ? (
@@ -719,7 +768,9 @@ const Documents = () => {
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-12 h-12 rounded-xl bg-notary-cyan/10 flex items-center justify-center text-xs font-semibold text-notary-cyan">
-                          {getFileIcon(latest.fileType)}
+                          {getFileIcon(
+                            latest.fileType,
+                          )}
                         </div>
                         <div>
                           <h3 className="font-heading font-semibold text-gray-900 truncate max-w-[320px]">
@@ -731,11 +782,17 @@ const Documents = () => {
                                 latest.documentType,
                               )}`}
                             >
-                              {latest.documentType}
+                              {
+                                latest.documentType
+                              }
                             </span>
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-notary-dark text-notary-cyan border border-notary-cyan/20">
                               <GitBranch className="w-3 h-3 mr-1" />
-                              {group.versions.length} version(s)
+                              {
+                                group.versions
+                                  .length
+                              }{" "}
+                              version(s)
                             </span>
                           </div>
                         </div>
@@ -763,7 +820,9 @@ const Documents = () => {
                           Latest Version Hash
                         </span>
                         <span className="font-mono text-xs text-notary-cyan">
-                          {truncateHash(latest.fileHash)}
+                          {truncateHash(
+                            latest.fileHash,
+                          )}
                         </span>
                       </div>
                     </div>
@@ -781,33 +840,51 @@ const Documents = () => {
 
                   {expanded ? (
                     <div className="mt-5 pt-5 border-t border-notary-slate-dark/30 space-y-3">
-                      {group.versions.map((version, idx) => (
-                        <div
-                          key={version.id}
-                          className="rounded-xl bg-white border border-[#CCCCCC] p-4"
-                        >
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div>
-                              <p className="text-gray-500 font-medium">
-                                Version V{group.versions.length - idx}
-                              </p>
-                              <p className="text-slate-700 text-xm">
-                                {version.fileName} •{" "}
-                                {formatDate(version.mintDate)}
-                              </p>
-                              <p className="font-mono text-xs text-notary-cyan mt-1 break-all">
-                                {version.fileHash}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setSelectedDocument(version)}
-                                className="flex items-center justify-center space-x-1 py-2 px-3 rounded-lg bg-notary-cyan/10 text-notary-cyan text-sm font-medium hover:bg-notary-cyan/20 transition-colors"
-                              >
-                                <Eye className="w-4 h-4" />
-                                <span>View</span>
-                              </button>
-                              {/* <button
+                      {group.versions.map(
+                        (version, idx) => (
+                          <div
+                            key={version.id}
+                            className="rounded-xl bg-white border border-[#CCCCCC] p-4"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                              <div>
+                                <p className="text-gray-500 font-medium">
+                                  Version V
+                                  {group
+                                    .versions
+                                    .length -
+                                    idx}
+                                </p>
+                                <p className="text-slate-700 text-xm">
+                                  {
+                                    version.fileName
+                                  }{" "}
+                                  •{" "}
+                                  {formatDate(
+                                    version.mintDate,
+                                  )}
+                                </p>
+                                <p className="font-mono text-xs text-notary-cyan mt-1 break-all">
+                                  {
+                                    version.fileHash
+                                  }
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() =>
+                                    setSelectedDocument(
+                                      version,
+                                    )
+                                  }
+                                  className="flex items-center justify-center space-x-1 py-2 px-3 rounded-lg bg-notary-cyan/10 text-notary-cyan text-sm font-medium hover:bg-notary-cyan/20 transition-colors"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                  <span>
+                                    View
+                                  </span>
+                                </button>
+                                {/* <button
                                 onClick={() =>
                                   navigator.clipboard.writeText(
                                     version.transactionHash,
@@ -818,68 +895,94 @@ const Documents = () => {
                               >
                                 <Share2 className="w-4 h-4" />
                               </button> */}
-                              <button
-                                onClick={() => openListModal(version)}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-600 hover:text-orange-500 transition-colors"
-                                title="List for Sale"
-                              >
-                                <ShoppingBag className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => openUpdateModal(version)}
-                                disabled={!version.isListed}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                title={
-                                  version.isListed
-                                    ? "Update Price"
-                                    : "Not listed"
-                                }
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  void handleUnlistDocument(version);
-                                }}
-                                disabled={!version.isListed || isUnlisting}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                title={
-                                  version.isListed
-                                    ? "Unlist"
-                                    : "Not listed"
-                                }
-                              >
-                                {isUnlisting ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <EyeOff className="w-4 h-4" />
-                                )}
-                              </button>
-                              <button
-                                onClick={() => openShareModal(version)}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 transition-colors"
-                                title="Share By Wallet"
-                              >
-                                <Share2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  void handleDownloadFile(version);
-                                }}
-                                disabled={downloadingId === version.id}
-                                className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                title="Download Original File"
-                              >
-                                {downloadingId === version.id ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  <Download className="w-4 h-4" />
-                                )}
-                              </button>
+                                <button
+                                  onClick={() =>
+                                    openListModal(
+                                      version,
+                                    )
+                                  }
+                                  className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-600 hover:text-orange-500 transition-colors"
+                                  title="List for Sale"
+                                >
+                                  <ShoppingBag className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    openUpdateModal(
+                                      version,
+                                    )
+                                  }
+                                  disabled={
+                                    !version.isListed
+                                  }
+                                  className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  title={
+                                    version.isListed
+                                      ? "Update Price"
+                                      : "Not listed"
+                                  }
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    void handleUnlistDocument(
+                                      version,
+                                    );
+                                  }}
+                                  disabled={
+                                    !version.isListed ||
+                                    isUnlisting
+                                  }
+                                  className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  title={
+                                    version.isListed
+                                      ? "Unlist"
+                                      : "Not listed"
+                                  }
+                                >
+                                  {isUnlisting ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <EyeOff className="w-4 h-4" />
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    openShareModal(
+                                      version,
+                                    )
+                                  }
+                                  className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 transition-colors"
+                                  title="Share By Wallet"
+                                >
+                                  <Share2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    void handleDownloadFile(
+                                      version,
+                                    );
+                                  }}
+                                  disabled={
+                                    downloadingId ===
+                                    version.id
+                                  }
+                                  className="p-2 rounded-lg hover:bg-notary-dark-secondary text-slate-700 hover:text-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  title="Download Original File"
+                                >
+                                  {downloadingId ===
+                                    version.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Download className="w-4 h-4" />
+                                  )}
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ),
+                      )}
                     </div>
                   ) : null}
                 </div>
@@ -923,7 +1026,7 @@ const Documents = () => {
               </div>
               <button
                 onClick={closeShareModal}
-                className="text-slate-500 hover:text-white transition-colors"
+                className="text-slate-500 hover:text-slate-700 transition-colors"
                 disabled={isSharing}
               >
                 ✕
@@ -942,7 +1045,7 @@ const Documents = () => {
                     setShareWalletAddress(event.target.value)
                   }
                   placeholder="0x..."
-                  className="w-full px-4 py-3 rounded-xl bg-notary-dark border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all font-mono text-sm"
+                  className="w-full px-4 py-3 rounded-xl bg-notary-dark border border-notary-slate-dark text-slate-600 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all font-mono text-sm"
                 />
               </div>
 
@@ -954,7 +1057,7 @@ const Documents = () => {
                   value={shareMessage}
                   onChange={(event) => setShareMessage(event.target.value)}
                   rows={3}
-                  className="w-full px-4 py-3 rounded-xl bg-notary-dark border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all text-sm resize-none"
+                  className="w-full px-4 py-3 rounded-xl bg-notary-dark border border-notary-slate-dark text-slate-700 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all text-sm resize-none"
                 />
               </div>
 
@@ -1033,7 +1136,9 @@ const Documents = () => {
                   min="0"
                   step="0.001"
                   value={listPrice}
-                  onChange={(event) => setListPrice(event.target.value)}
+                  onChange={(event) =>
+                    setListPrice(event.target.value)
+                  }
                   placeholder="0.025"
                   className="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all text-sm"
                 />
@@ -1097,7 +1202,7 @@ const Documents = () => {
               </div>
               <button
                 onClick={closeUpdateModal}
-                className="text-slate-500 hover:text-white transition-colors"
+                className="text-slate-500 hover:text-slate-800 transition-colors"
                 disabled={isUpdating}
               >
                 ✕
@@ -1114,7 +1219,9 @@ const Documents = () => {
                   min="0"
                   step="0.001"
                   value={updatePrice}
-                  onChange={(event) => setUpdatePrice(event.target.value)}
+                  onChange={(event) =>
+                    setUpdatePrice(event.target.value)
+                  }
                   placeholder="0.025"
                   className="w-full px-4 py-3 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all text-sm"
                 />
