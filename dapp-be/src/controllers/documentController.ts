@@ -27,7 +27,6 @@ export const mintDocument = async (req: Request, res: Response) => {
       ownerAddress,
       tags,
       transactionHash,
-      ipfsUri,
       decryptionKeyPayload,
     } = req.body;
 
@@ -76,8 +75,8 @@ export const mintDocument = async (req: Request, res: Response) => {
       `INSERT INTO documents 
                 (user_id, token_id, file_hash, file_name, file_size, file_type,
                 title, document_type, description, owner_name, owner_address,
-                tags, transaction_hash, ipfs_uri, ipfs_cid, encrypted_key)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+                tags, transaction_hash, ipfs_cid, encrypted_key)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
             RETURNING *`,
       [
         userId,
@@ -93,7 +92,6 @@ export const mintDocument = async (req: Request, res: Response) => {
         normalizedOwnerAddress,
         tags,
         transactionHash,
-        ipfsUri,
         req.body.ipfsCid ?? null,
         encryptedKey,
       ],
@@ -512,20 +510,6 @@ export const verifyDocument = async (req: Request, res: Response) => {
     );
 
     const found = result.rows.length > 0;
-    const documentId = found ? result.rows[0].id : null;
-
-    // ← THÊM: ghi access_log
-    await pool.query(
-      `INSERT INTO access_log (document_id, file_hash, ip_address, user_agent, found)
-             VALUES ($1, $2, $3, $4, $5)`,
-      [
-        documentId,
-        hash,
-        req.ip ?? req.socket.remoteAddress,
-        req.headers["user-agent"] ?? null,
-        found,
-      ],
-    );
 
     if (!found) {
       return res.json({ found: false });
@@ -861,7 +845,7 @@ export const getMarketplace = async (req: Request, res: Response) => {
     const result = await pool.query(
       `SELECT d.id, d.token_id, d.file_hash, d.file_name, d.file_type, d.file_size, d.title, d.document_type,
               d.description, d.owner_name, d.owner_address, d.tags, d.transaction_hash,
-              d.ipfs_uri, d.ipfs_cid, d.mint_date, d.price, d.currency,
+              d.ipfs_cid, d.mint_date, d.price, d.currency,
               COALESCE(COUNT(dar.id) FILTER (WHERE dar.status = 'approved' AND dar.source = 'market_purchase'), 0) AS sales_count
        FROM documents d
        LEFT JOIN document_access_requests dar ON dar.document_id = d.id

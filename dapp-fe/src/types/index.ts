@@ -21,7 +21,6 @@ export interface NotarizedDocument {
     tags: string[];
     mintDate: Date;
     transactionHash: string;
-    ipfsUri: string;
     ipfsCid?: string;
     price?: number;
     isListed?: boolean;

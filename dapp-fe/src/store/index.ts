@@ -29,6 +29,11 @@ interface AppStore {
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 
+if (typeof window !== "undefined") {
+    // Clear persisted token on refresh/load as requested.
+    localStorage.removeItem("jwt_token");
+}
+
 const CHAIN_NAMES: Record<string, string> = {
     "0x1": "Ethereum Mainnet",
     "0x5afe": "Oasis Sapphire Mainnet",
@@ -79,8 +84,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
         balance: "0.00",
     },
 
-    // ← THÊM: đọc JWT từ localStorage khi khởi tạo store (persist login qua reload)
-    token: localStorage.getItem("jwt_token"),
+    // Token only lives in memory for this session.
+    token: null,
 
     connectWallet: async () => {
         const provider = getEthereumProvider();
@@ -121,9 +126,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
             });
             const authData = await authRes.json();
             if (!authRes.ok) throw new Error(authData.message as string);
-
-            // ← THÊM: lưu JWT vào localStorage để dùng lại sau khi reload
-            localStorage.setItem("jwt_token", authData.token as string);
 
             const [balanceHex, chainId] = await Promise.all([
                 provider.request<string>({
@@ -242,9 +244,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
                 ownerName: String(d.owner_name ?? ""),
                 ownerAddress: String(d.owner_address ?? ""),
                 tags: Array.isArray(d.tags) ? (d.tags as string[]) : [],
-                mintDate: new Date(String(d.mint_date ?? d.created_at)),
+                mintDate: new Date(String(d.mint_date ?? Date.now())),
                 transactionHash: String(d.transaction_hash ?? ""),
-                ipfsUri: String(d.ipfs_uri ?? ""),
                 ipfsCid: String(d.ipfs_cid ?? ""), // ← THÊM: field mới từ Pinata
                 isListed: Boolean(d.is_listed),
                 price: d.price == null ? undefined : Number(d.price),

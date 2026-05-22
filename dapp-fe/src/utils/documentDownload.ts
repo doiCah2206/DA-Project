@@ -18,16 +18,8 @@ const sanitizeFileName = (value: string) => value
     .replace(/^-|-$/g, '')
     .toLowerCase();
 
-const getIpfsGatewayUrl = (ipfsUri: string, ipfsCid?: string) => {
-    if (ipfsCid) {
-        return `https://gateway.pinata.cloud/ipfs/${ipfsCid}`;
-    }
-
-    if (ipfsUri.startsWith('ipfs://')) {
-        return `https://gateway.pinata.cloud/ipfs/${ipfsUri.replace('ipfs://', '')}`;
-    }
-
-    return ipfsUri;
+const getIpfsGatewayUrl = (ipfsCid: string) => {
+    return `https://gateway.pinata.cloud/ipfs/${ipfsCid}`;
 };
 
 const base64ToArrayBuffer = (base64: string) => {
@@ -127,7 +119,7 @@ export const buildCertificateContent = (document: NotarizedDocument) => {
         `File Hash (SHA-256): ${document.fileHash}`,
         `Mint Date: ${formatDate(document.mintDate)}`,
         `Transaction Hash: ${document.transactionHash}`,
-        `IPFS URI: ${document.ipfsUri}`,
+        `IPFS CID: ${document.ipfsCid ?? ''}`,
         '',
         'This certificate verifies that the document above was notarized on the blockchain.',
     ].join('\n');
@@ -158,11 +150,11 @@ export const downloadCertificate = (document: NotarizedDocument) => {
 export const downloadEncryptedFile = async (document: NotarizedDocument) => {
     requireAuthToken();
 
-    if (!document.ipfsCid && !document.ipfsUri) {
-        throw new Error('Khong tim thay IPFS URI');
+    if (!document.ipfsCid) {
+        throw new Error('Khong tim thay IPFS CID');
     }
 
-    const encryptedUrl = getIpfsGatewayUrl(document.ipfsUri, document.ipfsCid);
+    const encryptedUrl = getIpfsGatewayUrl(document.ipfsCid);
     const response = await fetch(encryptedUrl);
 
     if (!response.ok) {
@@ -180,14 +172,14 @@ export const downloadEncryptedFile = async (document: NotarizedDocument) => {
 export const downloadOriginalFile = async (document: NotarizedDocument) => {
     requireAuthToken();
 
-    if (!document.ipfsCid && !document.ipfsUri) {
-        throw new Error('Khong tim thay IPFS URI');
+    if (!document.ipfsCid) {
+        throw new Error('Khong tim thay IPFS CID');
     }
 
     const secretKeyPayload = await fetchSecretKeyFromApi(document);
 
     // Download encrypted file from IPFS
-    const encryptedUrl = getIpfsGatewayUrl(document.ipfsUri, document.ipfsCid);
+    const encryptedUrl = getIpfsGatewayUrl(document.ipfsCid);
     const response = await fetch(encryptedUrl);
 
     if (!response.ok) {

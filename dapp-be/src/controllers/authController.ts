@@ -92,7 +92,7 @@ export const connectWallet = async (req: Request, res: Response) => {
         const token = jwt.sign(
             { userId: user.id, wallet_address: user.wallet_address },
             process.env.JWT_SECRET as string,
-            { expiresIn: '7d' }
+            { expiresIn: '1h' }
         )
 
         res.json({
@@ -104,4 +104,48 @@ export const connectWallet = async (req: Request, res: Response) => {
         console.error('Lỗi connect wallet:', error)
         res.status(500).json({ message: 'Lỗi server' })
     }
+}
+
+// POST /api/auth/refresh
+export const refreshAccessToken = async (req: Request, res: Response) => {
+    try {
+        const authHeader = req.headers.authorization
+
+        if (!authHeader) {
+            return res.status(401).json({ message: 'Không có token' })
+        }
+
+        const token = authHeader.split(' ')[1]
+
+        if (!token) {
+            return res.status(401).json({ message: 'Token không hợp lệ' })
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string, {
+            ignoreExpiration: true,
+        })
+
+        if (typeof decoded === 'string' || !decoded) {
+            return res.status(401).json({ message: 'Token không hợp lệ' })
+        }
+
+        const { userId, wallet_address } = decoded as { userId: number; wallet_address: string }
+
+        const newToken = jwt.sign(
+            { userId, wallet_address },
+            process.env.JWT_SECRET as string,
+            { expiresIn: '1h' }
+        )
+
+        return res.json({ token: newToken })
+    } catch (error) {
+        console.error('Lỗi refresh token:', error)
+        return res.status(401).json({ message: 'Token không hợp lệ' })
+    }
+}
+
+// POST /api/auth/logout
+export const logout = async (_req: Request, res: Response) => {
+    // JWT stateless -> FE chi can xoa token phia client
+    return res.json({ message: 'Đăng xuất thành công' })
 }

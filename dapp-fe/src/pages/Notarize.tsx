@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 import {
@@ -33,6 +33,18 @@ const getVersionGroupKey = (doc: NotarizedDocument): string => {
     return `${title}::${owner}`;
 };
 
+const isUserRejectedError = (err: unknown): boolean => {
+    if (!err || typeof err !== "object") return false;
+    const error = err as { code?: number; message?: string };
+    if (error.code === 4001) return true;
+    const message = error.message?.toLowerCase() ?? "";
+    return (
+        message.includes("user rejected") ||
+        message.includes("denied") ||
+        message.includes("cancel")
+    );
+};
+
 const Notarize = () => {
     const navigate = useNavigate();
     const { wallet, addDocument, documents, fetchDocuments } = useAppStore();
@@ -55,6 +67,24 @@ const Notarize = () => {
     const [mintingStep, setMintingStep] = useState("");
     const [copied, setCopied] = useState(false);
     const [mintedDoc, setMintedDoc] = useState<NotarizedDocument | null>(null);
+    const [uiNotice, setUiNotice] = useState<
+        { type: "info" | "error" | "success"; message: string } | null
+    >(null);
+    const uiNoticeTimerRef = useRef<number | null>(null);
+
+    const showUiNotice = useCallback(
+        (type: "info" | "error" | "success", message: string) => {
+            setUiNotice({ type, message });
+            if (uiNoticeTimerRef.current) {
+                window.clearTimeout(uiNoticeTimerRef.current);
+            }
+            uiNoticeTimerRef.current = window.setTimeout(() => {
+                setUiNotice(null);
+                uiNoticeTimerRef.current = null;
+            }, 3500);
+        },
+        [],
+    );
 
     const versionGroups = useMemo(() => {
         const map = new Map<
@@ -210,28 +240,28 @@ const Notarize = () => {
         if (!wallet.isConnected || !formData.file) return;
         if (duplicateFileExists) {
             alert(
-                "File nay da ton tai voi vi dang nhap hien tai. Vui long chon file khac hoac dung phien ban da co neu phu hop.",
+                "This file already exists for the current wallet. Please choose a different file or use the existing version if appropriate.",
             );
             return;
         }
         if (duplicateTitleExists) {
             alert(
-                "Document Title da ton tai. Vui long doi ten hoac chon Add New Version neu day la phien ban moi.",
+                "The document title already exists. Please rename it or choose Add New Version if this is a new version.",
             );
             return;
         }
         const token = useAppStore.getState().token;
         if (!token) {
-            alert("Chua xac thuc. Vui long ket noi vi lai.");
+            alert("Not authenticated. Please reconnect your wallet.");
             return;
         }
         if (!CONTRACT_ADDRESS) {
-            alert("Thieu CONTRACT_ADDRESS trong dapp-fe/.env");
+            alert("Missing CONTRACT_ADDRESS in dapp-fe/.env");
             return;
         }
 
         setMintingStatus("preparing");
-        setMintingStep("Dang ma hoa file...");
+        setMintingStep("Encrypting file...");
 
         try {
             const fileBuffer = await formData.file.arrayBuffer();
@@ -253,7 +283,7 @@ const Notarize = () => {
             const ivBase64 = btoa(String.fromCharCode(...iv));
 
             setMintingStatus("uploading");
-            setMintingStep("Dang upload len IPFS (Pinata)...");
+            setMintingStep("Uploading to IPFS (Pinata)...");
             const encryptedBlob = new Blob([encryptedBuffer], {
                 type: "application/octet-stream",
             });
@@ -276,16 +306,16 @@ const Notarize = () => {
             if (!pinataRes.ok) {
                 const pinataError = await pinataRes.text().catch(() => "");
                 throw new Error(
-                    `Upload Pinata that bai (${pinataRes.status}): ${pinataError || "khong co phan hoi"}`,
+                    `Pinata upload failed (${pinataRes.status}): ${pinataError || "no response"}`,
                 );
             }
             const pinataData = await pinataRes.json();
             const ipfsCid: string = pinataData.IpfsHash;
 
             setMintingStatus("minting");
-            setMintingStep("Dang mint NFT tren blockchain...");
+            setMintingStep("Minting NFT on the blockchain...");
             const { BrowserProvider, Contract } = await import("ethers");
-            if (!window.ethereum) throw new Error("Khong tim thay vi Web3");
+            if (!window.ethereum) throw new Error("Web3 wallet not found");
             const currentChainId = await window.ethereum.request<string>({
                 method: "eth_chainId",
             });
@@ -297,7 +327,7 @@ const Notarize = () => {
                     });
                 } catch {
                     throw new Error(
-                        "Vui long chuyen sang mang Oasis Sapphire Testnet truoc khi mint",
+                        "Please switch to the Oasis Sapphire Testnet before minting",
                     );
                 }
             }
@@ -343,7 +373,6 @@ const Notarize = () => {
                     ownerAddress: wallet.address,
                     tags: formData.tags,
                     transactionHash: txHash,
-                    ipfsUri: `ipfs://${ipfsCid}`,
                     ipfsCid,
                     decryptionKeyPayload: { key: aesKeyBase64, iv: ivBase64 },
                 }),
@@ -352,7 +381,7 @@ const Notarize = () => {
             if (!mintRes.ok)
                 throw new Error(
                     mintData.message ||
-                    `Luu metadata that bai (${mintRes.status})`,
+                    `Failed to save metadata (${mintRes.status})`,
                 );
 
             await fetch(`${API}/documents/${mintData.document.id}/ipfs-cid`, {
@@ -379,7 +408,6 @@ const Notarize = () => {
                 tags: formData.tags,
                 mintDate: new Date(),
                 transactionHash: txHash,
-                ipfsUri: `ipfs://${ipfsCid}`,
                 ipfsCid,
             };
 
@@ -387,7 +415,11 @@ const Notarize = () => {
             addDocument(newDoc);
             setMintingStatus("success");
         } catch (err: unknown) {
-            alert(`Mint thất bại: ${parseError(err)}`);
+            if (isUserRejectedError(err)) {
+                showUiNotice("info", "Mint transaction cancelled");
+            } else {
+                alert(`Mint failed: ${parseError(err)}`);
+            }
             setMintingStatus("idle");
             setMintingStep("");
         }
@@ -452,9 +484,8 @@ const Notarize = () => {
                             New Document
                         </h3>
                     </div>
-                    <p className="text-slate-400 text-sm">
-                        Tao mot document hoan toan moi, version se bat dau tu
-                        V1.
+                    <p className="text-slate-600 text-sm">
+                        Create a new document, starting with version V1
                     </p>
                 </button>
 
@@ -471,22 +502,22 @@ const Notarize = () => {
                             Add New Version
                         </h3>
                     </div>
-                    <p className="text-slate-400 text-sm">
-                        Chon document cu va tao them phien ban moi cho no.
+                    <p className="text-slate-600 text-sm">
+                        Select the old document and add a new version to it
                     </p>
                 </button>
             </div>
 
             {versionMode === "existing" ? (
                 <div className="space-y-3">
-                    <h4 className="text-slate-300 font-semibold">
-                        Chon Document Goc
+                    <h4 className="text-slate-600 font-semibold">
+                        Choose Document
                     </h4>
 
                     {versionGroups.length === 0 ? (
                         <div className="rounded-xl border border-notary-slate-dark bg-notary-dark-secondary/40 p-4 text-slate-400 text-sm">
-                            Ban chua co document nao trong My Documents de them
-                            version.
+                            You do not have any documents in My Documents to
+                            add a version.
                         </div>
                     ) : (
                         <div className="max-h-72 overflow-auto space-y-2 pr-1">
@@ -528,10 +559,10 @@ const Notarize = () => {
                     Upload File
                 </h2>
                 <p className="text-slate-400">
-                    Upload file cho{" "}
+                    Upload file for{" "}
                     {versionMode === "existing"
                         ? `Version ${nextVersionNumber}`
-                        : "document moi"}
+                        : "a new document"}
                 </p>
             </div>
 
@@ -627,7 +658,7 @@ const Notarize = () => {
                     Fill Metadata
                 </h2>
                 <p className="text-slate-400">
-                    Cap nhat thong tin document truoc khi mint
+                    Update document information before minting
                 </p>
             </div>
 
@@ -648,7 +679,7 @@ const Notarize = () => {
                         disabled={versionMode === "existing"}
                         placeholder="e.g., Employment Contract - John Doe"
                         aria-invalid={duplicateTitleExists}
-                        className={`w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all disabled:cursor-not-allowed disabled:opacity-70 ${duplicateTitleExists ? "border-red-500/60 focus:border-red-500 focus:ring-red-500/20" : "border-notary-slate-dark"}`}
+                        className={`w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border text-slate-700 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all disabled:cursor-not-allowed disabled:opacity-70 ${duplicateTitleExists ? "border-red-500/60 focus:border-red-500 focus:ring-red-500/20" : "border-notary-slate-dark"}`}
                     />
                     {duplicateTitleExists ? (
                         <p className="mt-2 text-xs text-red-400">
@@ -699,7 +730,7 @@ const Notarize = () => {
                         }
                         placeholder="Brief description of the document..."
                         rows={3}
-                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all resize-none"
+                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-gray-700 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all resize-none"
                     />
                 </div>
 
@@ -717,7 +748,7 @@ const Notarize = () => {
                             }))
                         }
                         placeholder="e.g., John Doe"
-                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-slate-950 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     />
                 </div>
 
@@ -737,7 +768,7 @@ const Notarize = () => {
                             setFormData((prev) => ({ ...prev, tags }));
                         }}
                         placeholder="e.g., contract, legal, important"
-                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-white placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
+                        className="w-full px-4 py-3 rounded-xl bg-notary-dark-secondary border border-notary-slate-dark text-slate-700 placeholder-slate-500 focus:border-notary-cyan focus:ring-1 focus:ring-notary-cyan transition-all"
                     />
                 </div>
             </div>
@@ -758,9 +789,9 @@ const Notarize = () => {
 
                     <p className="text-slate-400 mb-8">
                         {versionMode === "existing"
-                            ? `Da tao Version ${nextVersionNumber}`
-                            : "Da tao Version 1"}{" "}
-                        cho document.
+                            ? `Created Version ${nextVersionNumber}`
+                            : "Created Version 1"}{" "}
+                        for the document.
                     </p>
 
                     <div className="notary-card rounded-2xl p-6 text-left mb-8">
@@ -780,9 +811,9 @@ const Notarize = () => {
                                 </span>
                             </div>
                             <div className="flex justify-between py-2">
-                                <span className="text-slate-400">IPFS URI</span>
+                                <span className="text-slate-400">IPFS CID</span>
                                 <span className="font-mono text-xs text-slate-500">
-                                    {mintedDoc.ipfsUri.slice(0, 20)}...
+                                    {mintedDoc.ipfsCid?.slice(0, 20)}...
                                 </span>
                             </div>
                         </div>
@@ -911,7 +942,7 @@ const Notarize = () => {
                 <div className="flex items-center justify-between p-4 rounded-xl bg-notary-gold/10 border border-notary-gold/30">
                     <div className="flex items-center">
                         <AlertCircle className="w-5 h-5 text-notary-gold mr-3" />
-                        <span className="text-slate-300">
+                        <span className="text-slate-950">
                             Estimated Gas Fee
                         </span>
                     </div>
@@ -953,6 +984,28 @@ const Notarize = () => {
             style={{ fontFamily: "'DM Sans', sans-serif" }}
         >
             <div className="max-w-3xl mx-auto">
+                {uiNotice ? (
+                    <div className="fixed top-20 right-5 z-50">
+                        <div
+                            className={`flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg backdrop-blur ${uiNotice.type === "success"
+                                ? "border-notary-success/40 bg-notary-success/15 text-notary-success"
+                                : uiNotice.type === "error"
+                                    ? "border-red-500/40 bg-red-500/10 text-red-400"
+                                    : "border-notary-cyan/40 bg-notary-cyan/10 text-notary-cyan"
+                                }`}
+                        >
+                            <span className="text-sm font-medium">
+                                {uiNotice.message}
+                            </span>
+                            <button
+                                onClick={() => setUiNotice(null)}
+                                className="ml-2 text-inherit/70 hover:text-inherit"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
                 {renderStepIndicator()}
 
                 {step === 1 && renderStep1()}

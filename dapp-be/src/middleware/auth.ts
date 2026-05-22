@@ -10,8 +10,13 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
         return res.status(401).json({ message: 'Không có token' })
     }
 
-    // Cắt chuỗi "Bearer eyJhbGci..." → lấy phần sau chữ Bearer
-    const token = authHeader.split(' ')[1]
+    const parts = authHeader.trim().split(' ').filter(Boolean)
+    const scheme = parts[0]?.toLowerCase()
+    const token = parts.length === 1
+        ? parts[0]
+        : (scheme === 'bearer' || scheme === 'jwt' || scheme === 'token')
+            ? parts[1]
+            : parts[1]
 
     if (!token) {
         return res.status(401).json({ message: 'Token không hợp lệ' })
@@ -21,8 +26,8 @@ export const authMiddleware = (req: Request, res: Response, next: NextFunction) 
         // Giải mã token, nếu hết hạn hoặc bị sửa thì throw lỗi xuống catch
         const decoded = jwt.verify(token, process.env.JWT_SECRET as string)
 
-        // Gắn thông tin user vào req để controller sau dùng được req.user.userId
-        ;(req as any).user = decoded
+            // Gắn thông tin user vào req để controller sau dùng được req.user.userId
+            ; (req as any).user = decoded
 
         // Cho request đi tiếp vào controller
         next()
